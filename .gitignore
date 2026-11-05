@@ -1,0 +1,10 @@
+# Etiquetas generadas y exportaciones con datos reales: no subir
+etiquetas_qr.pdf
+*.pdf
+!docs/img/*.pdf
+datos/*.csv
+!datos/*_ejemplo.csv
+.clasp.json
+__pycache__/
+node_modules/
+.DS_Store

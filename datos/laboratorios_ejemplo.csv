@@ -1,0 +1,4 @@
+id,nombre,ubicacion,responsable_email
+LAB-OPT,Laboratorio de Óptica e Instrumentación,"Edificio del OAN, primer piso",responsable.optica@unal.edu.co
+LAB-OBS,Plataforma de observación,Terraza del OAN,responsable.observacion@unal.edu.co
+LAB-DIV,Sala de divulgación,Planetario del campus,responsable.divulgacion@unal.edu.co

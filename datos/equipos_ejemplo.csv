@@ -1,0 +1,9 @@
+id,nombre,categoria,laboratorio_id,marca,modelo,serie,nivel_control,estado,max_dias,componentes,notas
+OAN-TEL-0001,"Telescopio Schmidt-Cassegrain 8""",Telescopios,LAB-OBS,Celestron,C8,,supervisado,disponible,2,"Tubo óptico; Buscador 8×50; Diagonal 1¼""; Tapa frontal",
+OAN-TEL-0002,Refractor apocromático 80 mm,Telescopios,LAB-OBS,Sky-Watcher,Evostar 80ED,,libre,disponible,3,Tubo óptico; Anillos; Estuche,
+OAN-MON-0001,Montura ecuatorial GoTo,Monturas,LAB-OBS,Sky-Watcher,EQ6-R,,supervisado,disponible,2,Cabezal; Trípode; Contrapesos (2); Mando SynScan; Cable de alimentación,
+OAN-CAM-0001,Cámara CCD científica,Cámaras,LAB-OPT,ZWO,ASI2600MM Pro,,restringido,disponible,2,Cámara; Cable USB 3.0; Fuente 12 V; Rueda de filtros,Guardar con desecante
+OAN-ESP-0001,Espectrógrafo de baja resolución,Espectrógrafos,LAB-OPT,Shelyak,Alpy 600,,restringido,disponible,3,Espectrógrafo; Módulo de calibración; Maletín,
+OAN-OCU-0001,Estuche de oculares y filtros,Oculares y filtros,LAB-OBS,Varias,,,libre,disponible,3,Ocular 25 mm; Ocular 10 mm; Barlow 2×; Filtro lunar; Filtro solar de lámina,
+OAN-CMP-0001,Portátil de adquisición,Computadores,LAB-OPT,Lenovo,ThinkPad,,supervisado,disponible,5,Portátil; Cargador,
+OAN-DIV-0001,Kit de divulgación: sistema solar,Divulgación,LAB-DIV,,,,libre,disponible,7,Maqueta; Láminas (12); Guía del monitor,

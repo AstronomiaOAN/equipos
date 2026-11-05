@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es-CO" data-nocturno="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f6f9">
+  <meta name="description" content="Registro de préstamo y devolución de equipos de los laboratorios del Observatorio Astronómico Nacional.">
+  <title>Préstamo de equipos · OAN</title>
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilos.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <a class="saltar" href="#app">Ir al contenido</a>
+  <p id="banda-demo" class="banda-demo" hidden>Modo demostración: los datos se guardan solo en este navegador.</p>
+  <header class="cabecera">
+    <a class="marca" href="./">
+      <svg class="marca-icono" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="2.5" fill="currentColor"/></svg>
+      <span>Observatorio Astronómico Nacional<small>Préstamo de equipos</small></span>
+    </a>
+    <nav id="cuenta" class="cuenta" aria-label="Cuenta"></nav>
+    <button id="nocturno" class="nocturno" type="button" aria-pressed="false" title="Pantalla en rojo para no perder la adaptación a la oscuridad durante la observación">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="currentColor"/></svg>
+      <span>Luz roja</span>
+    </button>
+  </header>
+  <main id="app" class="contenido">
+    <p class="cargando" role="status">Cargando…</p>
+  </main>
+  <noscript><p class="contenido">Esta página necesita JavaScript para registrar préstamos.</p></noscript>
+</body>
+</html>
