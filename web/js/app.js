@@ -26,7 +26,7 @@ const salida = {
   guardar(lista) { lista.length ? almacen.escribir('oan-salida', lista) : this.vaciar(); },
   agregar(eq) {
     const lista = this.equipos().filter(x => x.id !== eq.id);
-    lista.push({ id: eq.id, nombre: eq.nombre, max_dias: eq.max_dias, nivel_control: eq.nivel_control, componentes: eq.componentes || [], laboratorio: eq.laboratorio });
+    lista.push({ id: eq.id, nombre: eq.nombre, max_dias: eq.max_dias, nivel_control: eq.nivel_control, componentes: eq.componentes || [], laboratorio: eq.laboratorio, foto: eq.foto || '' });
     this.guardar(lista);
   },
   quitar(id) { this.guardar(this.equipos().filter(x => x.id !== id)); },
@@ -35,6 +35,34 @@ const salida = {
 };
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const sinTildes = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** Una foto del equipo, o un recuadro con un ícono si no tiene o si no carga. */
+const ICONO_EQUIPO = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 30l26-14 3 6-26 14z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 30l-6 12M24 29l6 13M37 22l4-2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="23" cy="29" r="2.5" fill="currentColor"/></svg>';
+const fotoVacia = () => `<div class="foto-vacia">${ICONO_EQUIPO}<span>Foto pendiente</span></div>`;
+function fotoDe(eq, cargaDiferida = true) {
+  if (!eq.foto) return fotoVacia();
+  return `<img class="foto" src="${esc(eq.foto)}" alt="${esc(eq.nombre)}"${cargaDiferida ? ' loading="lazy"' : ''} decoding="async" referrerpolicy="no-referrer">`;
+}
+document.addEventListener('error', ev => {
+  const img = ev.target;
+  if (img.tagName === 'IMG' && img.classList.contains('foto')) img.outerHTML = fotoVacia();
+}, true);
+
+function creditoFoto(eq) {
+  const c = String(eq.credito_foto || '').trim();
+  if (!c) return '';
+  if (!/^https:\/\//.test(c)) return esc(c);
+  const fuente = c.includes('wikimedia.org') ? 'Wikimedia Commons' : new URL(c).hostname;
+  return `Foto de referencia: <a href="${esc(c)}" target="_blank" rel="noopener">${esc(fuente)}</a> (autor y licencia)`;
+}
+
+/** «Apertura: 203 mm; Distancia focal: 2032 mm» → [['Apertura', '203 mm'], …] */
+const caracteristicas = texto => String(texto || '').split(/\s*[;\n]\s*/).filter(Boolean).map(par => {
+  const i = par.indexOf(':');
+  return i > 0 ? [par.slice(0, i).trim(), par.slice(i + 1).trim()] : ['', par.trim()];
+});
+
 const opciones = (lista, elegido) => lista.map(o => `<option${o === elegido ? ' selected' : ''}>${esc(o)}</option>`).join('');
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
@@ -95,7 +123,10 @@ async function enviar(form, accion, datos, alTerminar) {
   const r = await llamar(accion, { token: sesion?.token, ...datos });
   boton.disabled = false;
   boton.textContent = original;
-  if (r.ok) return alTerminar(r);
+  if (r.ok) {
+    if (!['solicitarCodigo', 'verificarCodigo'].includes(accion)) cacheCatalogo = null;
+    return alTerminar(r);
+  }
   if (r.codigo === 401 && accion !== 'verificarCodigo') {
     cerrarSesion(false);
     return pedirSesion(location.search);
@@ -114,7 +145,7 @@ function pintarCabecera() {
   const zona = document.getElementById('cuenta');
   if (!zona) return;
   const n = salida.equipos().length;
-  zona.innerHTML = (n ? `<a href="?vista=salida" class="enlace-salida">Mi salida (${n})</a>` : '') + (sesion
+  zona.innerHTML = '<a href="?vista=catalogo">Equipos</a>' + (n ? `<a href="?vista=salida" class="enlace-salida">Mi salida (${n})</a>` : '') + (sesion
     ? `<a href="?vista=mis">Mis préstamos</a>${sesion.usuario?.gestiona?.length ? '<a href="?vista=gestion">Panel</a>' : ''}`
     : '<a href="?vista=entrar">Iniciar sesión</a>');
 }
@@ -145,6 +176,7 @@ function vistaInicio() {
   mostrar(`
     <h1>Préstamo de equipos</h1>
     <p class="entrada">Escanee con la cámara del celular el código QR pegado en el equipo. Si va a sacar varios equipos para la misma actividad, escanee el primero y agregue los demás desde el formulario.</p>
+    <p><a class="boton secundario" href="?vista=catalogo">Ver todos los equipos</a></p>
     <form id="buscar" class="buscar" novalidate>
       <label for="codigo">Código del equipo</label>
       <div class="fila-buscar">
@@ -261,6 +293,12 @@ async function vistaEquipo(id) {
       <p class="codigo-equipo">${esc(eq.id).replace(/-/g, '‑')}</p>
       <h1>${esc(eq.nombre)}</h1>
       <p class="estado estado-${esc(eq.estado)}"><span class="punto" aria-hidden="true"></span>${esc(ESTADOS_EQUIPO[eq.estado] || eq.estado)}</p>
+      <figure class="foto-equipo"><span class="marco-foto">${fotoDe(eq, false)}</span>${eq.credito_foto ? `<figcaption>${creditoFoto(eq)}</figcaption>` : ''}</figure>
+      <div class="zona-accion">${accion}</div>
+      ${eq.descripcion ? `<p class="descripcion">${esc(eq.descripcion)}</p>` : ''}
+      ${caracteristicas(eq.especificaciones).length ? `<h2 class="subtitulo">Características</h2>
+      <dl class="ficha">${caracteristicas(eq.especificaciones).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : ''}
+      <h2 class="subtitulo">Préstamo</h2>
       <dl class="ficha">
         <div><dt>Laboratorio</dt><dd>${esc(eq.laboratorio)}${eq.ubicacion ? `<br><span class="tenue">${esc(eq.ubicacion)}</span>` : ''}</dd></div>
         ${eq.marca || eq.modelo ? `<div><dt>Modelo</dt><dd>${esc([eq.marca, eq.modelo].filter(Boolean).join(' '))}</dd></div>` : ''}
@@ -268,7 +306,6 @@ async function vistaEquipo(id) {
         ${eq.componentes?.length ? `<div><dt>Incluye</dt><dd><ul class="componentes">${eq.componentes.map(c => `<li>${esc(c)}</li>`).join('')}</ul></dd></div>` : ''}
         ${eq.notas ? `<div><dt>Notas</dt><dd>${esc(eq.notas)}</dd></div>` : ''}
       </dl>
-      <div class="zona-accion">${accion}</div>
       <p class="pie-equipo"><button class="enlace" id="b-reportar">Reportar un daño o falla de este equipo</button></p>
     </article>`);
 
@@ -347,6 +384,7 @@ function conectarGestion(contenedor, despues) {
       boton.disabled = true;
       const r = await llamar(nombre, datos);
       if (!r.ok) alert(r.error);
+      cacheCatalogo = null;
       despues();
     });
   });
@@ -429,7 +467,8 @@ function vistaSalida() {
         <legend>Equipos</legend>
         <ul class="lista-salida">
           ${equipos.map(e => `<li>
-            <span><strong>${esc(e.nombre)}</strong><br><span class="tenue">${esc(e.id)}${e.nivel_control === 'restringido' ? ' · requiere aprobación' : ''}</span></span>
+            <span class="miniatura">${fotoDe(e)}</span>
+            <span class="lista-salida-texto"><strong>${esc(e.nombre)}</strong><br><span class="tenue">${esc(e.id)}${e.nivel_control === 'restringido' ? ' · requiere aprobación' : ''}</span></span>
             <button type="button" class="quitar" data-quitar="${esc(e.id)}" aria-label="Quitar ${esc(e.nombre)}">Quitar</button>
           </li>`).join('')}
         </ul>
@@ -800,6 +839,116 @@ async function vistaGestion() {
   }));
 }
 
+// ─── Catálogo de equipos ────────────────────────────────────────────────────
+
+let cacheCatalogo = null;
+const filtrosCatalogo = { texto: '', categoria: '', laboratorio: '', disponibles: false };
+
+async function vistaCatalogo() {
+  const reciente = cacheCatalogo && Date.now() - cacheCatalogo.hora < 60e3;
+  if (!reciente) cargando('Cargando equipos…');
+  const r = reciente ? cacheCatalogo.datos : await llamar('catalogo');
+  if (!r.ok) {
+    const viejo = /acci[oó]n no v[aá]lida/i.test(r.error || '');
+    return mostrar(`<h1>Equipos del observatorio</h1><p class="error">${viejo
+      ? 'El servidor todavía tiene una versión anterior del sistema. El administrador debe actualizar el código de Apps Script (ver apps-script/README.md).'
+      : esc(r.error)}</p>`);
+  }
+  cacheCatalogo = { hora: Date.now(), datos: r };
+  const equipos = r.equipos;
+  const categorias = [...new Set(equipos.map(e => e.categoria).filter(Boolean))];
+  const disponibles = equipos.filter(e => e.estado === 'disponible').length;
+  const situacion = e => e.estado === 'disponible' ? 'Disponible'
+    : e.estado === 'prestado' && e.disponible_desde ? `Prestado hasta el ${fecha(e.disponible_desde)}`
+    : (ESTADOS_EQUIPO[e.estado] || e.estado);
+
+  mostrar(`
+    <h1>Equipos del observatorio</h1>
+    <p class="entrada">${plural(equipos.length, 'equipo', 'equipos')}, ${plural(disponibles, 'disponible', 'disponibles')} ahora. Toque uno para ver su ficha, o agréguelo a su salida para pedir varios a la vez.</p>
+    <div class="filtros">
+      <label class="oculto" for="f-texto">Buscar equipos</label>
+      <input id="f-texto" type="search" placeholder="Buscar por nombre, código, marca o uso" value="${esc(filtrosCatalogo.texto)}" autocomplete="off">
+      <div class="chips" role="group" aria-label="Categoría">
+        ${['', ...categorias].map(c => `<button type="button" class="chip" data-cat="${esc(c)}" aria-pressed="${filtrosCatalogo.categoria === c}">${esc(c || 'Todos')}</button>`).join('')}
+      </div>
+      <div class="fila-filtros">
+        <label class="casilla-linea"><input type="checkbox" id="f-disp"${filtrosCatalogo.disponibles ? ' checked' : ''}> Solo disponibles</label>
+        <label class="oculto" for="f-lab">Laboratorio</label>
+        <select id="f-lab"><option value="">Todos los laboratorios</option>${r.laboratorios.map(l => `<option value="${esc(l.nombre)}"${filtrosCatalogo.laboratorio === l.nombre ? ' selected' : ''}>${esc(l.nombre)}</option>`).join('')}</select>
+      </div>
+    </div>
+    <p class="conteo" id="conteo" role="status"></p>
+    <ul class="catalogo">
+      ${equipos.map(e => `<li class="tarjeta" data-id="${esc(e.id)}" data-cat="${esc(e.categoria)}" data-lab="${esc(e.laboratorio)}" data-disp="${e.estado === 'disponible'}"
+          data-texto="${esc(sinTildes([e.id, e.nombre, e.marca, e.modelo, e.categoria, e.descripcion].join(' ')))}">
+        <a class="tarjeta-enlace" href="?e=${esc(e.id)}">
+          <span class="tarjeta-foto">${fotoDe(e)}</span>
+          <span class="tarjeta-cuerpo">
+            <span class="tarjeta-codigo">${esc(e.id).replace(/-/g, '\u2011')}</span>
+            <span class="tarjeta-nombre">${esc(e.nombre)}</span>
+            ${e.marca || e.modelo ? `<span class="tarjeta-modelo">${esc([e.marca, e.modelo].filter(Boolean).join(' · '))}</span>` : ''}
+            ${e.descripcion ? `<span class="tarjeta-desc">${esc(e.descripcion)}</span>` : ''}
+          </span>
+        </a>
+        <div class="tarjeta-pie">
+          <span class="estado-mini estado-${esc(e.estado)}"><span class="punto" aria-hidden="true"></span>${esc(situacion(e))}</span>
+          ${e.estado === 'disponible' ? botonAgregar(e) : ''}
+        </div>
+      </li>`).join('')}
+    </ul>
+    <p class="vacio" id="sin-resultados" hidden>Ningún equipo coincide con la búsqueda.</p>
+    <div class="barra-salida" id="barra-salida" hidden></div>`);
+
+  const tarjetas = [...raiz.querySelectorAll('.tarjeta')];
+  const filtrar = () => {
+    const q = sinTildes(filtrosCatalogo.texto).trim().split(/\s+/).filter(Boolean);
+    let visibles = 0;
+    tarjetas.forEach(t => {
+      const ok = (!filtrosCatalogo.categoria || t.dataset.cat === filtrosCatalogo.categoria)
+        && (!filtrosCatalogo.laboratorio || t.dataset.lab === filtrosCatalogo.laboratorio)
+        && (!filtrosCatalogo.disponibles || t.dataset.disp === 'true')
+        && q.every(p => t.dataset.texto.includes(p));
+      t.hidden = !ok;
+      if (ok) visibles++;
+    });
+    document.getElementById('conteo').textContent = visibles === equipos.length ? '' : `Mostrando ${plural(visibles, 'equipo', 'equipos')} de ${equipos.length}.`;
+    document.getElementById('sin-resultados').hidden = visibles > 0;
+  };
+  document.getElementById('f-texto').addEventListener('input', ev => { filtrosCatalogo.texto = ev.target.value; filtrar(); });
+  document.getElementById('f-disp').addEventListener('change', ev => { filtrosCatalogo.disponibles = ev.target.checked; filtrar(); });
+  document.getElementById('f-lab').addEventListener('change', ev => { filtrosCatalogo.laboratorio = ev.target.value; filtrar(); });
+  raiz.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    filtrosCatalogo.categoria = b.dataset.cat;
+    raiz.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    filtrar();
+  }));
+  raiz.querySelector('.catalogo').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-agregar]');
+    if (!b) return;
+    const eq = equipos.find(e => e.id === b.dataset.agregar);
+    salida.agregar(eq);
+    b.outerHTML = botonAgregar(eq);
+    pintarCabecera();
+    pintarBarraSalida();
+  });
+  filtrar();
+  pintarBarraSalida();
+}
+
+function botonAgregar(eq) {
+  return salida.tiene(eq.id)
+    ? '<span class="en-salida">En su salida</span>'
+    : `<button type="button" class="mini" data-agregar="${esc(eq.id)}" aria-label="Agregar ${esc(eq.nombre)} a la salida">Agregar a la salida</button>`;
+}
+
+function pintarBarraSalida() {
+  const barra = document.getElementById('barra-salida');
+  if (!barra) return;
+  const n = salida.equipos().length;
+  barra.hidden = n === 0;
+  barra.innerHTML = n ? `<span>Su salida: <strong>${plural(n, 'equipo', 'equipos')}</strong></span><a class="boton principal" href="?vista=salida">Continuar con el préstamo</a>` : '';
+}
+
 // ─── Enrutador ──────────────────────────────────────────────────────────────
 
 function enrutar() {
@@ -807,7 +956,9 @@ function enrutar() {
   const equipo = p.get('e');
   const vista = p.get('vista');
   pintarCabecera();
+  document.body.classList.toggle('vista-ancha', !equipo && vista === 'catalogo');
   if (equipo) return vistaEquipo(equipo);
+  if (vista === 'catalogo') return vistaCatalogo();
   if (vista === 'salida') return vistaSalida();
   if (vista === 'mis') return vistaMisPrestamos();
   if (vista === 'gestion') return vistaGestion();

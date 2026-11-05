@@ -2,7 +2,7 @@
 // Sirve para probar la web y capacitar al personal antes de conectar la hoja de cálculo.
 import { CATALOGOS, EQUIPOS_DEMO, LABORATORIOS_DEMO } from './catalogos.js';
 
-const CLAVE = 'oan-equipos-demo-v2';
+const CLAVE = 'oan-equipos-demo-v3';
 const ABIERTOS = ['pendiente', 'activo', 'por_verificar'];
 
 class ErrorDemo extends Error {
@@ -158,6 +158,20 @@ const ACCIONES = {
     return {
       equipo: { ...eq, laboratorio: lab.nombre, ubicacion: lab.ubicacion },
       prestamo, puede_gestionar: gestor, catalogos: CATALOGOS
+    };
+  },
+
+  catalogo(db) {
+    const labs = Object.fromEntries(db.laboratorios.map(l => [l.id, l]));
+    return {
+      equipos: db.equipos.filter(e => e.estado !== 'baja').map(e => {
+        const p = abierto(db, e.id);
+        return {
+          ...e, laboratorio: labs[e.laboratorio_id]?.nombre || '', ubicacion: labs[e.laboratorio_id]?.ubicacion || '',
+          ...(p && p.estado === 'activo' ? { disponible_desde: p.fecha_prevista } : {})
+        };
+      }),
+      laboratorios: db.laboratorios.map(({ id, nombre, ubicacion }) => ({ id, nombre, ubicacion }))
     };
   },
 

@@ -37,6 +37,21 @@ Formato `OAN-<categoría>-<consecutivo de 4 dígitos>`. El código nunca se reut
 - **Piezas pequeñas** (oculares, filtros): una etiqueta para el estuche, y el estuche completo se presta como un solo equipo, con sus piezas en la lista de componentes.
 - **Kits:** una etiqueta para el kit y la lista de piezas en la columna `componentes`; al devolver, el sistema muestra esa lista para chequearla.
 
+## Fotos de los equipos
+
+Cada equipo puede tener una foto, que aparece en el catálogo, en la ficha que abre el QR y en la lista de la salida. Ayuda a reconocer el equipo y a revisar que se devuelve completo.
+
+**Cómo agregarlas (recomendado: Google Drive de oan.unal@gmail.com)**
+
+1. Tome la foto con el equipo armado y completo, sobre un fondo liso y con buena luz. Horizontal (4:3) se ve mejor.
+2. Súbala a la carpeta **Sistema de préstamo de equipos OAN → Fotos de equipos** del Drive, con el código como nombre (`OAN-TEL-0001.jpg`).
+3. Clic derecho → **Compartir** → Acceso general: **Cualquier persona con el enlace** (lector) → **Copiar enlace**.
+4. Pegue el enlace en la columna `foto` de la hoja `Equipos`. El sistema lo convierte solo en una imagen que la web puede mostrar.
+
+También sirve cualquier dirección `https://` de una imagen. Si la columna queda vacía o la foto no carga, la web muestra un recuadro con un ícono. En `credito_foto` se puede anotar el autor o la fuente.
+
+Las 20 fotos del catálogo de ejemplo son **fotos de referencia de Wikimedia Commons** (libres, con autor y licencia en el enlace de cada una), no de los equipos del OAN. Reemplácelas por fotos propias al cargar el inventario real.
+
 ## Cómo imprimirlas
 
 1. Exportar la hoja `Equipos` como CSV (Archivo → Descargar → Valores separados por comas).

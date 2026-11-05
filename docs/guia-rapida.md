@@ -29,6 +29,7 @@
 - Si viene de otra institución, necesitará el correo de un docente o funcionario de la universidad que sea su avalista.
 - Durante la observación, active **Luz roja** (botón de la luna) para no perder la adaptación a la oscuridad.
 - En «Mis préstamos» ve lo que tiene a su cargo y su historial.
+- En **Equipos** está el catálogo completo con fotos, características y disponibilidad. Desde ahí también puede agregar equipos a su salida.
 
 ## Para el responsable del laboratorio
 
@@ -39,7 +40,8 @@
 
 ## Para el administrador
 
-- **Agregar un equipo:** nueva fila en `Equipos` con un código que no se haya usado, y luego imprimir su etiqueta (`--solo OAN-XXX-0000`).
+- **Agregar un equipo:** nueva fila en `Equipos` con un código que no se haya usado, su descripción, características y foto, y luego imprimir su etiqueta (`--solo OAN-XXX-0000`).
+- **Fotos:** súbalas al Drive (carpeta *Fotos de equipos*), compártalas como «Cualquier persona con el enlace» y pegue el enlace en la columna `foto` ([detalle](04-codigos-qr-y-etiquetas.md#fotos-de-los-equipos)).
 - **Asignar responsables:** columna `responsable_email` de `Laboratorios` (varios correos separados por coma).
 - **Dar acceso total:** `rol = admin` en `Usuarios`.
 - **Bloquear a alguien:** `activo = NO` en `Usuarios`.

@@ -20,6 +20,7 @@ Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el Q
 
 - Equipos y materiales inventariables de los laboratorios del OAN: telescopios y tubos ópticos, monturas, cámaras, espectrógrafos y fotómetros, oculares y filtros, computadores, instrumentos de medición, kits de divulgación.
 - Préstamo y devolución de uno o varios equipos a la vez («salidas»), aprobación, verificación y reporte de daños.
+- Un **catálogo público de equipos** con foto, descripción, características y disponibilidad, para que estudiantes y docentes sepan qué hay antes de pedirlo.
 - Alertas por correo y un panel para los responsables.
 
 ## Qué no cubre (por ahora)

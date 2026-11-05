@@ -2,7 +2,7 @@
 
 Sistema para registrar el préstamo y la devolución de los equipos de los laboratorios del Observatorio Astronómico Nacional (OAN) de la Universidad Nacional de Colombia.
 
-Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea con el celular, dice para qué lo va a usar y cuándo lo devuelve, y el sistema guarda la **fecha y hora de salida**. Si una actividad necesita **varios equipos**, se escanean uno tras otro en el mismo formulario y los datos de la actividad se escriben una sola vez. Al devolverlo escanea el mismo QR, indica en qué estado lo entrega y se guarda la **fecha y hora de devolución**. Los responsables de cada laboratorio ven en un panel qué está prestado, a quién y para qué, y reciben avisos de vencimientos y daños.
+Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea con el celular, dice para qué lo va a usar y cuándo lo devuelve, y el sistema guarda la **fecha y hora de salida**. Si una actividad necesita **varios equipos**, se escanean uno tras otro en el mismo formulario y los datos de la actividad se escriben una sola vez. Al devolverlo escanea el mismo QR, indica en qué estado lo entrega y se guarda la **fecha y hora de devolución**. Los responsables de cada laboratorio ven en un panel qué está prestado, a quién y para qué, y reciben avisos de vencimientos y daños. Un **catálogo** con fotos, descripción y características muestra todos los equipos y si están disponibles.
 
 <p>
   <img src="docs/img/equipo.png" width="230" alt="Ficha de un equipo al escanear su QR">

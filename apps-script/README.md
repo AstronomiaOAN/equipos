@@ -50,9 +50,22 @@ En la hoja: **Préstamos OAN → Instalar alerta diaria (7 a. m.)**.
 
 Google permite a una cuenta @gmail.com enviar unos **100 correos al día** desde Apps Script. El sistema manda un solo correo por salida (aunque sean varios equipos) y agrupa los avisos de vencimiento por persona. Para ver cuántos quedan: **Préstamos OAN → Ver correos disponibles hoy**. Si se agotan con frecuencia, ponga `CORREO_COMPROBANTES: false` en `CONFIG` o mueva el sistema a una cuenta institucional de Google Workspace (unos 1.500 al día).
 
+## Cargar el catálogo de ejemplo (20 equipos con fotos)
+
+En la hoja: **Préstamos OAN → Cargar catálogo de ejemplo (20 equipos)**, o en el editor elija la función `cargarCatalogoDeEjemplo` y **Ejecutar**.
+
+Agrega las columnas `descripcion`, `especificaciones`, `foto` y `credito_foto` si faltan, completa los equipos de ejemplo que ya existen (respeta su estado y número de serie) y agrega los que falten. No borra ni cambia ningún otro equipo. Las fotos son de referencia, de Wikimedia Commons.
+
 ## Actualizar el código
 
-Después de cambiar `Code.gs`: **Implementar → Gestionar implementaciones → Editar (lápiz) → Versión: Nueva versión → Implementar**. La URL `/exec` se mantiene y no hay que tocar la web.
+Cada vez que cambie `Code.gs` en el repositorio:
+
+1. Copie el código nuevo desde <https://raw.githubusercontent.com/AstronomiaOAN/equipos/main/apps-script/Code.gs> (Ctrl + A, Ctrl + C).
+2. En el editor de Apps Script, borre todo el contenido de `Código.gs`, pegue y guarde.
+3. Ejecute `configurar` (agrega las columnas nuevas, si las hay; no borra nada).
+4. **Implementar → Gestionar implementaciones → Editar (lápiz) → Versión: Nueva versión → Implementar.** La URL `/exec` se mantiene y no hay que tocar la web.
+
+Si se omite el paso 4, la web sigue hablando con la versión anterior.
 
 Para sincronizar con este repositorio desde la terminal se puede usar [`clasp`](https://github.com/google/clasp): `clasp clone <id-del-script>` en esta carpeta y luego `clasp push`.
 
@@ -75,3 +88,5 @@ Se ejecutan solas en GitHub en cada cambio (`.github/workflows/pruebas.yml`).
 | No llegan los códigos | Revisar correo no deseado; ver **Ejecuciones** en el editor; revisar el límite diario de correos |
 | Los cambios del código no se ven | Falta crear una **nueva versión** de la implementación |
 | Un responsable no ve el panel | Su correo no está en `responsable_email` de `Laboratorios`, o tiene espacios de más |
+| El catálogo dice «versión anterior del sistema» | Falta crear la **nueva versión** de la implementación después de pegar el código |
+| Una foto de Drive no aparece | El archivo no está compartido como «Cualquier persona con el enlace» |

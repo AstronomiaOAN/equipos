@@ -41,7 +41,8 @@ test('en una hoja nueva configurar carga datos iniciales una sola vez', () => {
   e.api.configurar();
   e.api.configurar();
   assert.ok(e.hojas.Instrucciones);
-  assert.equal(e.leer('Equipos').length, 8);
+  assert.equal(e.leer('Equipos').length, 20);
+  assert.ok(e.leer('Equipos').every(x => x.foto.startsWith('https://') && x.descripcion.length > 20));
   assert.equal(e.leer('Laboratorios').length, 3);
   const admin = e.leer('Usuarios');
   assert.equal(admin.length, 1);
@@ -310,4 +311,62 @@ test('un solo aviso de vencimiento por persona aunque tenga varios equipos', () 
   const aAna = e.correos.slice(antes).filter(c => c.to === 'ana@unal.edu.co');
   assert.equal(aAna.length, 1);
   assert.match(aAna[0].subject, /2 equipos/);
+});
+
+// ─── Catálogo ───────────────────────────────────────────────────────────────
+
+test('catálogo público: fotos, descripción y sin datos personales', () => {
+  const e = crearEntorno();
+  e.api.configurar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  const perfil = { nombre: 'Ana Pérez', tipo: 'Docente', acepta_datos: true };
+  e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-TEL-0001'], perfil, ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  // Un equipo dado de baja no aparece
+  const h = e.hojas.Equipos; const col = h.filas[0].indexOf('estado');
+  h.filas.find(f => f[0] === 'OAN-DIV-0005')[col] = 'baja';
+
+  const r = e.llamar({ accion: 'catalogo' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.equipos.length, 19);
+  assert.equal(r.laboratorios.length, 3);
+  const tel = r.equipos.find(x => x.id === 'OAN-TEL-0001');
+  assert.equal(tel.estado, 'prestado');
+  assert.ok(tel.disponible_desde, 'indica hasta cuándo está prestado');
+  assert.ok(tel.foto.includes('commons.wikimedia.org'));
+  assert.ok(tel.especificaciones.includes('Apertura'));
+  const texto = JSON.stringify(r);
+  assert.ok(!texto.includes('ana@unal.edu.co') && !texto.includes('Ana Pérez'), 'sin datos personales');
+});
+
+test('cargarCatalogoDeEjemplo actualiza sin borrar ni cambiar estados', () => {
+  const e = crearEntorno();
+  e.api.configurar();
+  const h = e.hojas.Equipos; const cab = h.filas[0];
+  // Simula la hoja antigua: un equipo de ejemplo prestado y sin foto, y un equipo real
+  const fila = h.filas.find(f => f[0] === 'OAN-TEL-0001');
+  fila[cab.indexOf('estado')] = 'prestado';
+  fila[cab.indexOf('foto')] = '';
+  fila[cab.indexOf('serie')] = 'SN-123';
+  e.llenar('Equipos', [{ id: 'OAN-TEL-0099', nombre: 'Telescopio real', estado: 'disponible' }]);
+  const quitar = h.filas.findIndex(f => f[0] === 'OAN-DIV-0004'); h.filas.splice(quitar, 1);
+
+  const msj = e.api.cargarCatalogoDeEjemplo();
+  assert.match(msj, /1 equipo\(s\) agregado\(s\), 19 actualizado/);
+  const equipos = e.leer('Equipos');
+  assert.equal(equipos.length, 21);
+  const tel = equipos.find(x => x.id === 'OAN-TEL-0001');
+  assert.equal(tel.estado, 'prestado', 'respeta el estado');
+  assert.equal(tel.serie, 'SN-123', 'respeta la serie');
+  assert.ok(tel.foto.startsWith('https://'));
+  assert.ok(equipos.find(x => x.id === 'OAN-TEL-0099'), 'no toca equipos reales');
+});
+
+test('fotos de Google Drive se convierten en imagen directa', () => {
+  const e = preparar();
+  const h = e.hojas.Equipos; const cab = h.filas[0];
+  h.filas[1][cab.indexOf('foto')] = 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view?usp=sharing';
+  h.filas[2][cab.indexOf('foto')] = 'no es una url';
+  const r = e.llamar({ accion: 'catalogo' });
+  assert.equal(r.equipos[0].foto, 'https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345=w800');
+  assert.equal(r.equipos[1].foto, '');
 });

@@ -2,11 +2,21 @@
 
 La web está pensada para el celular, que es lo que la gente tiene en la mano cuando escanea un QR. Funciona igual en un computador. Las capturas son del [modo demostración](../web/README.md).
 
+## Catálogo de equipos
+
+Menú **Equipos** (siempre visible arriba). Muestra todos los equipos que no están dados de baja, en tarjetas con:
+
+- **foto**, código, nombre, marca y modelo, y el comienzo de la descripción;
+- **disponibilidad**: «Disponible», «Prestado hasta el 7 nov.», «En mantenimiento»…, sin mostrar quién lo tiene;
+- el botón **Agregar a la salida**, para armar desde aquí una salida de varios equipos. Abajo aparece una barra «Su salida: N equipos · Continuar con el préstamo».
+
+Arriba hay un buscador (por nombre, código, marca o uso; no importan las tildes), filtros por **categoría** y **laboratorio**, y la casilla **Solo disponibles**. En el celular las tarjetas van en una columna; en el computador, en varias. En el modo de luz roja las fotos se tiñen de rojo oscuro.
+
 ## Ficha del equipo (lo que abre el QR)
 
 <img src="img/equipo.png" width="300" alt="Ficha del equipo OAN-TEL-0001 disponible, con laboratorio, modelo, condiciones de préstamo, lista de componentes y botón para prestar">
 
-Lo más grande es el código del equipo, para que la persona confirme de un vistazo que abrió el equipo que tiene en la mano. Debajo, el estado con un indicador de color, el laboratorio, las condiciones de préstamo y lo que incluye. Hay **un solo botón principal**, que cambia según el estado: «Prestar este equipo», «Devolver este equipo» o, para el responsable, «Aprobar y entregar» o «Revisado: queda disponible».
+Lo más grande es el código del equipo, para que la persona confirme de un vistazo que abrió el equipo que tiene en la mano. Debajo van el estado, la **foto** (con su crédito), el botón de acción, la **descripción**, la tabla de **características** y los datos de préstamo: laboratorio, condiciones y lo que incluye. Hay **un solo botón principal**, que cambia según el estado: «Prestar este equipo», «Devolver este equipo» o, para el responsable, «Aprobar y entregar» o «Revisado: queda disponible».
 
 ## Formulario de préstamo (uno o varios equipos)
 

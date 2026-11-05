@@ -27,6 +27,9 @@ erDiagram
         text estado
         int max_dias
         text componentes
+        text descripcion
+        text especificaciones
+        text foto
     }
     USUARIOS {
         text email PK
@@ -78,6 +81,10 @@ erDiagram
 | `max_dias` | 2 | Plazo máximo de un préstamo. Vacío = 7 |
 | `componentes` | Tubo óptico; Buscador; Tapa | Separados por punto y coma. Se chequean al devolver |
 | `notas` | Guardar con desecante | Se muestra en la ficha |
+| `descripcion` | Telescopio catadióptrico compacto… | Uno o dos párrafos para el catálogo: qué es y para qué sirve |
+| `especificaciones` | Apertura: 203 mm; Distancia focal: 2032 mm | Pares «nombre: valor» separados por punto y coma. Se muestran como tabla de características |
+| `foto` | enlace de Google Drive o `https://…` | Ver [fotos de los equipos](04-codigos-qr-y-etiquetas.md#fotos-de-los-equipos) |
+| `credito_foto` | Foto: Laboratorio de Óptica, 2026 | Autor o fuente de la foto; si es un enlace, se muestra como enlace |
 
 ### `Laboratorios` — la llena el administrador
 
