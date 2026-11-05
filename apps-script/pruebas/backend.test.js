@@ -16,6 +16,8 @@ const SOLICITUD = {
 function preparar() {
   const e = crearEntorno();
   e.api.configurar();
+  // configurar() deja datos de ejemplo; las pruebas usan los suyos.
+  ['Laboratorios', 'Equipos', 'Usuarios'].forEach(n => e.hojas[n].filas.splice(1));
   e.llenar('Laboratorios', [
     { id: 'LAB-OPT', nombre: 'Laboratorio de Óptica', ubicacion: 'Edificio OAN', responsable_email: 'tecnico@unal.edu.co' }
   ]);
@@ -32,6 +34,22 @@ test('configurar crea todas las hojas con encabezados', () => {
   for (const nombre of Object.keys(e.api.HOJAS)) {
     assert.equal(JSON.stringify(e.hojas[nombre].filas[0]), JSON.stringify(e.api.HOJAS[nombre]));
   }
+});
+
+test('en una hoja nueva configurar carga datos iniciales una sola vez', () => {
+  const e = crearEntorno();
+  e.api.configurar();
+  e.api.configurar();
+  assert.ok(e.hojas.Instrucciones);
+  assert.equal(e.leer('Equipos').length, 8);
+  assert.equal(e.leer('Laboratorios').length, 3);
+  const admin = e.leer('Usuarios');
+  assert.equal(admin.length, 1);
+  assert.equal(admin[0].rol, 'admin');
+  // La cuenta del OAN entra como interna y gestiona todos los laboratorios
+  const s = e.iniciarSesion('oan.unal@gmail.com');
+  assert.equal(s.usuario.interno, true);
+  assert.equal(s.usuario.gestiona.length, 3);
 });
 
 test('inicio de sesión: código incorrecto y correcto', () => {
@@ -173,4 +191,123 @@ test('revisarVencimientos avisa al usuario y al responsable', () => {
   const nuevos = e.correos.slice(antes);
   assert.ok(nuevos.some(c => c.to === 'ana@unal.edu.co' && /vencido/i.test(c.subject)));
   assert.ok(nuevos.some(c => c.to.includes('tecnico@unal.edu.co')));
+});
+
+// ─── Salidas con varios equipos ─────────────────────────────────────────────
+
+test('salida con varios equipos: datos una vez, cada equipo con su registro', () => {
+  const e = preparar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  const antes = e.correos.length;
+  const r = e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-TEL-0001', 'OAN-MON-0001', 'OAN-CAM-0001'],
+    perfil: PERFIL, ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.prestamos.length, 3);
+  assert.ok(r.lote_id.startsWith('L-'));
+  const filas = e.leer('Prestamos');
+  assert.equal(new Set(filas.map(f => f.lote_id)).size, 1, 'mismo lote');
+  assert.ok(filas.every(f => f.proposito === SOLICITUD.proposito));
+  const porEquipo = Object.fromEntries(filas.map(f => [f.equipo_id, f.estado]));
+  assert.equal(porEquipo['OAN-TEL-0001'], 'activo');
+  assert.equal(porEquipo['OAN-MON-0001'], 'activo');
+  assert.equal(porEquipo['OAN-CAM-0001'], 'pendiente', 'el restringido espera aprobación');
+  assert.equal(r.requiere_aprobacion, true);
+  const alUsuario = e.correos.slice(antes).filter(c => c.to === 'ana@unal.edu.co');
+  assert.equal(alUsuario.length, 1, 'un solo correo para toda la salida');
+});
+
+test('si un equipo no está disponible no se registra ninguno', () => {
+  const e = preparar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  e.llamar({ accion: 'prestar', token: ana.token, equipo_id: 'OAN-TEL-0001', perfil: PERFIL, ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  const r = e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-MON-0001', 'OAN-TEL-0001'], ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  assert.equal(r.codigo, 409);
+  assert.match(r.error, /OAN-TEL-0001/);
+  assert.equal(e.leer('Prestamos').length, 1);
+  assert.equal(e.leer('Equipos')[2].estado, 'disponible');
+});
+
+test('el plazo de la salida lo fija el equipo con menor max_dias', () => {
+  const e = preparar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  const tres = new Date(Date.now() + 2.9 * 864e5).toISOString();
+  // TEL-0001 permite 3 días, CAM-0001 solo 2
+  const r = e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-TEL-0001', 'OAN-CAM-0001'], perfil: PERFIL, ...SOLICITUD, fecha_prevista: tres });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /2 día/);
+});
+
+test('aprobar, devolver y verificar una salida completa', () => {
+  const e = preparar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  const r = e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-TEL-0001', 'OAN-MON-0001', 'OAN-CAM-0001'],
+    perfil: PERFIL, ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  const tec = e.iniciarSesion('tecnico@unal.edu.co');
+  const ap = e.llamar({ accion: 'aprobar', token: tec.token, lote_id: r.lote_id, aprobar: true });
+  assert.equal(ap.prestamos.length, 1, 'solo había uno pendiente');
+  assert.ok(e.leer('Prestamos').every(p => p.estado === 'activo'));
+
+  // Una devolución con daño sin descripción no registra nada
+  const mala = e.llamar({ accion: 'devolver', token: ana.token, devoluciones: [
+    { equipo_id: 'OAN-TEL-0001', condicion: 'Bueno' }, { equipo_id: 'OAN-MON-0001', condicion: 'Dañado' }] });
+  assert.equal(mala.ok, false);
+  assert.ok(e.leer('Prestamos').every(p => p.estado === 'activo'));
+
+  const dev = e.llamar({ accion: 'devolver', token: ana.token, devoluciones: [
+    { equipo_id: 'OAN-TEL-0001', condicion: 'Bueno' },
+    { equipo_id: 'OAN-MON-0001', condicion: 'Con detalles menores', observaciones: 'Rayón en el trípode' },
+    { equipo_id: 'OAN-CAM-0001', condicion: 'Bueno' }] });
+  assert.equal(dev.ok, true, dev.error);
+  const estados = Object.fromEntries(e.leer('Equipos').map(x => [x.id, x.estado]));
+  assert.equal(estados['OAN-TEL-0001'], 'disponible', 'libre y en buen estado');
+  assert.equal(estados['OAN-MON-0001'], 'en_revision');
+  assert.equal(estados['OAN-CAM-0001'], 'en_revision');
+
+  const ver = e.llamar({ accion: 'verificar', token: tec.token, lote_id: r.lote_id });
+  assert.equal(ver.prestamos.length, 2);
+  assert.ok(e.leer('Equipos').every(x => x.estado === 'disponible'));
+});
+
+test('devolución parcial: se devuelve un equipo y el resto sigue prestado', () => {
+  const e = preparar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-TEL-0001', 'OAN-MON-0001'], perfil: PERFIL, ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  const r = e.llamar({ accion: 'devolver', token: ana.token, equipo_id: 'OAN-TEL-0001', condicion: 'Bueno' });
+  assert.equal(r.ok, true, r.error);
+  const estados = Object.fromEntries(e.leer('Prestamos').map(p => [p.equipo_id, p.estado]));
+  assert.equal(estados['OAN-TEL-0001'], 'devuelto');
+  assert.equal(estados['OAN-MON-0001'], 'activo');
+});
+
+test('cancelar una solicitud de varios equipos libera todos', () => {
+  const e = preparar();
+  const ext = e.iniciarSesion('visitante@gmail.com');
+  const r = e.llamar({ accion: 'prestar', token: ext.token, equipos: ['OAN-TEL-0001', 'OAN-MON-0001'],
+    perfil: { nombre: 'Visitante Externo', tipo: 'Externo', acepta_datos: true }, avalista_email: 'profe@unal.edu.co',
+    ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  assert.equal(r.prestamos.every(p => p.estado === 'pendiente'), true);
+  const c = e.llamar({ accion: 'cancelar', token: ext.token, lote_id: r.lote_id });
+  assert.equal(c.cancelados, 2);
+  assert.ok(e.leer('Equipos').every(x => x.estado === 'disponible'));
+});
+
+test('consulta de varios equipos a la vez', () => {
+  const e = preparar();
+  const r = e.llamar({ accion: 'equipos', ids: ['oan-tel-0001', 'OAN-XXX-9999'] });
+  assert.equal(r.equipos[0].nombre, 'Telescopio 8"');
+  assert.match(r.equipos[1].error, /No existe/);
+});
+
+test('un solo aviso de vencimiento por persona aunque tenga varios equipos', () => {
+  const e = preparar();
+  const ana = e.iniciarSesion('ana@unal.edu.co');
+  e.llamar({ accion: 'prestar', token: ana.token, equipos: ['OAN-TEL-0001', 'OAN-MON-0001'], perfil: PERFIL, ...SOLICITUD, fecha_prevista: EN_DOS_DIAS() });
+  const h = e.hojas.Prestamos;
+  const col = h.filas[0].indexOf('fecha_prevista');
+  h.filas.slice(1).forEach(f => { f[col] = new Date(Date.now() - 36e5); });
+  const antes = e.correos.length;
+  e.api.revisarVencimientos();
+  const aAna = e.correos.slice(antes).filter(c => c.to === 'ana@unal.edu.co');
+  assert.equal(aAna.length, 1);
+  assert.match(aAna[0].subject, /2 equipos/);
 });

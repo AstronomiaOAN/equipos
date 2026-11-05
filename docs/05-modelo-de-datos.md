@@ -1,6 +1,6 @@
 # 5. Modelo de datos
 
-En la fase 1 la base de datos es una hoja de cálculo de Google con una pestaña por tabla. Los nombres de pestañas y columnas son exactamente los que usa [`apps-script/Code.gs`](../apps-script/Code.gs); la función `configurar()` las crea. El mismo modelo está en PostgreSQL en [`db/schema.sql`](../db/schema.sql) para la fase 3.
+En la fase 1 la base de datos es una hoja de cálculo de Google, en el Drive de **oan.unal@gmail.com** (carpeta *Sistema de préstamo de equipos OAN*), con una pestaña por tabla. Los nombres de pestañas y columnas son exactamente los que usa [`apps-script/Code.gs`](../apps-script/Code.gs); la función `configurar()` las crea. El mismo modelo está en PostgreSQL en [`db/schema.sql`](../db/schema.sql) para la fase 3.
 
 ```mermaid
 erDiagram
@@ -38,6 +38,7 @@ erDiagram
     }
     PRESTAMOS {
         text id PK "P-AAMMDD-XXXXXX"
+        text lote_id "salida: varios equipos"
         text equipo_id FK
         text email FK
         text proposito
@@ -117,6 +118,7 @@ erDiagram
 | `condicion_salida`, `condicion_devolucion`, `obs_devolucion`, `componentes_ok` | Estado del equipo al salir y al volver |
 | `devuelto_por`, `aprobado_por`, `motivo_rechazo`, `verificado_por`, `fecha_verificacion` | Trazabilidad de quién hizo qué |
 | `recordatorio_enviado` | Para no repetir el aviso previo al vencimiento |
+| `lote_id` | Número de la **salida** (`L-251105-7C2D0E`): todos los equipos prestados juntos para una misma actividad comparten este valor |
 
 ### `Incidencias` — daños, faltantes y fallas
 

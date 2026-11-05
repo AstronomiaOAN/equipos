@@ -55,6 +55,7 @@ CREATE TABLE equipos (
 
 CREATE TABLE prestamos (
     id                   text PRIMARY KEY,       -- P-AAMMDD-XXXXXX
+    lote_id              text NOT NULL,          -- L-AAMMDD-XXXXXX: equipos prestados juntos para una actividad
     equipo_id            text NOT NULL REFERENCES equipos(id),
     email                text NOT NULL REFERENCES usuarios(email),
     nombre               text NOT NULL,          -- copia histórica del nombre
@@ -88,6 +89,7 @@ CREATE TABLE prestamos (
 CREATE UNIQUE INDEX un_prestamo_abierto_por_equipo
     ON prestamos (equipo_id) WHERE estado IN ('pendiente', 'activo', 'por_verificar');
 CREATE INDEX prestamos_por_usuario ON prestamos (email, fecha_solicitud DESC);
+CREATE INDEX prestamos_por_salida ON prestamos (lote_id);
 CREATE INDEX prestamos_activos_por_vencer ON prestamos (fecha_prevista) WHERE estado = 'activo';
 
 -- Fase 3: reservas anticipadas (p. ej. telescopios por noche de observación).

@@ -1,6 +1,7 @@
 import { CONFIG } from './config.js';
 import { llamar, MODO_DEMO } from './api.js';
 import { reiniciarDemo } from './demo.js';
+import { abrirEscaner, camaraDisponible, codigoDe } from './escaner.js';
 import { CATALOGOS as CATALOGOS_LOCALES, NIVELES, ESTADOS_EQUIPO, ESTADOS_PRESTAMO, EQUIPOS_DEMO } from './catalogos.js';
 
 // ─── Estado y utilidades ────────────────────────────────────────────────────
@@ -15,8 +16,27 @@ const almacen = {
 };
 let sesion = almacen.leer('oan-sesion');
 
+/**
+ * La «salida» es la lista de equipos que la persona va a sacar para una misma actividad.
+ * Se guarda en el navegador mientras la arma, junto con lo que lleva escrito del formulario,
+ * para que pueda escanear otros QR con la cámara del celular sin perder nada.
+ */
+const salida = {
+  equipos() { return almacen.leer('oan-salida') || []; },
+  guardar(lista) { lista.length ? almacen.escribir('oan-salida', lista) : this.vaciar(); },
+  agregar(eq) {
+    const lista = this.equipos().filter(x => x.id !== eq.id);
+    lista.push({ id: eq.id, nombre: eq.nombre, max_dias: eq.max_dias, nivel_control: eq.nivel_control, componentes: eq.componentes || [], laboratorio: eq.laboratorio });
+    this.guardar(lista);
+  },
+  quitar(id) { this.guardar(this.equipos().filter(x => x.id !== id)); },
+  tiene(id) { return this.equipos().some(x => x.id === id); },
+  vaciar() { almacen.borrar('oan-salida'); almacen.borrar('oan-borrador'); }
+};
+
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const opciones = (lista, elegido) => lista.map(o => `<option${o === elegido ? ' selected' : ''}>${esc(o)}</option>`).join('');
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 const formatoFecha = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
 const fecha = v => v ? formatoFecha.format(new Date(v)) : '—';
@@ -25,6 +45,17 @@ const fecha = v => v ? formatoFecha.format(new Date(v)) : '—';
 function valorLocal(d) {
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Agrupa préstamos por salida (lote), conservando el orden. */
+function porSalida(lista) {
+  const grupos = new Map();
+  lista.forEach(p => {
+    const k = p.lote_id || p.id;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(p);
+  });
+  return [...grupos.entries()].map(([lote, items]) => ({ lote, items }));
 }
 
 function ir(ruta, reemplazar = false) {
@@ -52,6 +83,7 @@ function aviso(form, mensaje) {
     form.querySelector('.acciones').before(caja);
   }
   caja.textContent = mensaje;
+  caja.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 /** Envía un formulario: desactiva el botón, llama la acción y maneja errores y sesión vencida. */
@@ -81,9 +113,10 @@ function cerrarSesion(redirigir = true) {
 function pintarCabecera() {
   const zona = document.getElementById('cuenta');
   if (!zona) return;
-  zona.innerHTML = sesion
+  const n = salida.equipos().length;
+  zona.innerHTML = (n ? `<a href="?vista=salida" class="enlace-salida">Mi salida (${n})</a>` : '') + (sesion
     ? `<a href="?vista=mis">Mis préstamos</a>${sesion.usuario?.gestiona?.length ? '<a href="?vista=gestion">Panel</a>' : ''}`
-    : '<a href="?vista=entrar">Iniciar sesión</a>';
+    : '<a href="?vista=entrar">Iniciar sesión</a>');
 }
 
 // ─── Modo nocturno (luz roja para no perder la adaptación a la oscuridad) ───
@@ -96,7 +129,7 @@ function aplicarNocturno(activo) {
   document.querySelector('meta[name=theme-color]').content = activo ? '#140302' : '#f3f6f9';
 }
 
-// ─── Vistas ─────────────────────────────────────────────────────────────────
+// ─── Inicio y sesión ────────────────────────────────────────────────────────
 
 function vistaInicio() {
   const demo = MODO_DEMO ? `
@@ -111,7 +144,7 @@ function vistaInicio() {
     </section>` : '';
   mostrar(`
     <h1>Préstamo de equipos</h1>
-    <p class="entrada">Escanee con la cámara del celular el código QR pegado en el equipo. Si la etiqueta no se puede leer, escriba el código impreso debajo del QR.</p>
+    <p class="entrada">Escanee con la cámara del celular el código QR pegado en el equipo. Si va a sacar varios equipos para la misma actividad, escanee el primero y agregue los demás desde el formulario.</p>
     <form id="buscar" class="buscar" novalidate>
       <label for="codigo">Código del equipo</label>
       <div class="fila-buscar">
@@ -122,11 +155,13 @@ function vistaInicio() {
     ${demo}`);
   document.getElementById('buscar').addEventListener('submit', ev => {
     ev.preventDefault();
-    const codigo = ev.target.codigo.value.trim().toUpperCase().replace(/\s+/g, '');
+    const valor = ev.target.codigo.value;
+    const codigo = codigoDe(valor) || valor.trim().toUpperCase().replace(/\s+/g, '');
     if (codigo) ir('?e=' + encodeURIComponent(codigo));
   });
   document.getElementById('reiniciar')?.addEventListener('click', () => {
     reiniciarDemo();
+    salida.vaciar();
     cerrarSesion();
   });
 }
@@ -139,7 +174,7 @@ function pedirSesion(volverA) {
       <label for="email">Correo electrónico</label>
       <input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="usuario@unal.edu.co" required>
       <p class="ayuda">Use el correo institucional. Si no pertenece a la universidad, use su correo personal: su préstamo necesitará un avalista.</p>
-      <div class="acciones"><button type="submit">Enviarme el código</button></div>
+      <div class="acciones"><button type="submit" class="principal">Enviarme el código</button></div>
     </form>`);
   const form = document.getElementById('f-correo');
   form.addEventListener('submit', ev => {
@@ -158,7 +193,7 @@ function pedirCodigo(email, envio, volverA) {
       <label for="cod">Código de 6 dígitos</label>
       <input id="cod" name="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" class="codigo-otp" required>
       <div class="acciones">
-        <button type="submit">Entrar</button>
+        <button type="submit" class="principal">Entrar</button>
         <button type="button" class="secundario" id="otro">Usar otro correo</button>
       </div>
     </form>`);
@@ -175,6 +210,8 @@ function pedirCodigo(email, envio, volverA) {
   });
 }
 
+// ─── Ficha del equipo (lo que abre el QR) ───────────────────────────────────
+
 async function vistaEquipo(id) {
   cargando('Buscando el equipo…');
   const r = await llamar('equipo', { id, token: sesion?.token });
@@ -185,10 +222,20 @@ async function vistaEquipo(id) {
   }
   if (r.catalogos) catalogos = r.catalogos;
   const { equipo: eq, prestamo: p, puede_gestionar: gestor } = r;
+  const enSalida = salida.equipos();
 
   let accion = '';
   if (eq.estado === 'disponible') {
-    accion = `<button class="principal" id="b-prestar">Prestar este equipo</button>`;
+    if (salida.tiene(eq.id)) {
+      accion = `<p class="aviso-estado">Este equipo ya está en su salida.</p>
+        <a class="boton principal" href="?vista=salida">Continuar con la salida (${enSalida.length})</a>`;
+    } else if (enSalida.length) {
+      accion = `<button class="principal" id="b-prestar">Agregar a mi salida</button>
+        <p class="ayuda">Su salida ya tiene ${plural(enSalida.length, 'equipo', 'equipos')}: ${esc(enSalida.map(x => x.nombre).join(', '))}.</p>`;
+    } else {
+      accion = `<button class="principal" id="b-prestar">Prestar este equipo</button>
+        <p class="ayuda">¿Necesita varios equipos para la misma actividad? Después de este podrá agregar los demás.</p>`;
+    }
   } else if (eq.estado === 'reservado' && p) {
     accion = p.es_mio
       ? `<div class="aviso-estado"><p>Su solicitud espera la aprobación del responsable del laboratorio. Le llegará un correo con la respuesta.</p></div>
@@ -196,11 +243,13 @@ async function vistaEquipo(id) {
       : gestor ? bloqueAprobacion(p) : `<p class="aviso-estado">Hay una solicitud de préstamo en trámite para este equipo.</p>`;
   } else if (eq.estado === 'prestado' && p) {
     const plazo = `${p.vencido ? 'Debía devolverse' : 'Se devuelve'} el <strong>${fecha(p.fecha_prevista)}</strong>`;
+    const varios = p.es_mio && p.activos_en_salida > 1;
     accion = p.es_mio || gestor
       ? `${gestor && !p.es_mio ? datosSolicitante(p) : ''}
-         <div class="aviso-estado ${p.vencido ? 'vencido' : ''}"><p>${p.es_mio ? 'Usted tiene este equipo. ' : ''}${plazo}</p></div>
-         <button class="principal" id="b-devolver">${p.es_mio ? 'Devolver este equipo' : 'Registrar la devolución'}</button>`
-      : `<p class="aviso-estado ${p.vencido ? 'vencido' : ''}">${plazo}</p>`;
+         <div class="aviso-estado ${p.vencido ? 'vencido' : ''}"><p>${p.es_mio ? 'Usted tiene este equipo. ' : ''}${plazo}.</p></div>
+         <button class="principal" id="b-devolver">${p.es_mio ? 'Devolver este equipo' : 'Registrar la devolución'}</button>
+         ${varios ? `<button class="secundario ancho" id="b-devolver-todo">Devolver los ${p.activos_en_salida} equipos de esta salida</button>` : ''}`
+      : `<p class="aviso-estado ${p.vencido ? 'vencido' : ''}">${plazo}.</p>`;
   } else if (eq.estado === 'en_revision') {
     accion = gestor && p ? bloqueVerificacion(p) : `<p class="aviso-estado">El equipo fue devuelto y el laboratorio lo está revisando.</p>`;
   } else {
@@ -209,7 +258,7 @@ async function vistaEquipo(id) {
 
   mostrar(`
     <article class="equipo">
-      <p class="codigo-equipo">${esc(eq.id).replace(/-/g, '\u2011')}</p>
+      <p class="codigo-equipo">${esc(eq.id).replace(/-/g, '‑')}</p>
       <h1>${esc(eq.nombre)}</h1>
       <p class="estado estado-${esc(eq.estado)}"><span class="punto" aria-hidden="true"></span>${esc(ESTADOS_EQUIPO[eq.estado] || eq.estado)}</p>
       <dl class="ficha">
@@ -224,11 +273,16 @@ async function vistaEquipo(id) {
     </article>`);
 
   const requiereSesion = fn => () => sesion ? fn() : pedirSesion(location.search);
-  document.getElementById('b-prestar')?.addEventListener('click', requiereSesion(() => formularioPrestamo(eq)));
-  document.getElementById('b-devolver')?.addEventListener('click', requiereSesion(() => formularioDevolucion(eq, p)));
+  document.getElementById('b-prestar')?.addEventListener('click', () => {
+    salida.agregar(eq);
+    pintarCabecera();
+    ir('?vista=salida');
+  });
+  document.getElementById('b-devolver')?.addEventListener('click', requiereSesion(() => formularioDevolucion([{ ...p, equipo_id: eq.id, equipo_nombre: eq.nombre }])));
+  document.getElementById('b-devolver-todo')?.addEventListener('click', requiereSesion(() => devolverSalida(p.lote_id)));
   document.getElementById('b-reportar').addEventListener('click', requiereSesion(() => formularioReporte(eq)));
   document.getElementById('b-cancelar')?.addEventListener('click', async ev => {
-    if (!confirm('¿Cancelar la solicitud de préstamo?')) return;
+    if (!confirm('¿Cancelar la solicitud de préstamo de este equipo?')) return;
     ev.target.disabled = true;
     const c = await llamar('cancelar', { token: sesion.token, prestamo_id: p.id });
     if (!c.ok) alert(c.error);
@@ -248,9 +302,10 @@ function datosSolicitante(p) {
 }
 
 function bloqueAprobacion(p) {
-  return `<section class="gestion-item" data-prestamo="${esc(p.id)}">
+  return `<section class="gestion-item" data-lote="${esc(p.lote_id)}">
     <h3>Solicitud por aprobar</h3>
     ${datosSolicitante(p)}
+    <p class="ayuda">Al aprobar se entregan todos los equipos pendientes de esta solicitud.</p>
     <div class="acciones">
       <button class="principal" data-accion="aprobar">Aprobar y entregar</button>
       <button class="secundario" data-accion="rechazar">Rechazar</button>
@@ -270,13 +325,14 @@ function bloqueVerificacion(p) {
   </section>`;
 }
 
-/** Botones de aprobar, rechazar y verificar, usados en la ficha del equipo y en el panel. */
+/** Botones de aprobar, rechazar y verificar; actúan sobre un préstamo o sobre toda una salida. */
 function conectarGestion(contenedor, despues) {
   contenedor.querySelectorAll('[data-accion]').forEach(boton => {
     boton.addEventListener('click', async () => {
-      const id = boton.closest('[data-prestamo]').dataset.prestamo;
+      const caja = boton.closest('[data-prestamo], [data-lote]');
+      const objetivo = caja.dataset.lote ? { lote_id: caja.dataset.lote } : { prestamo_id: caja.dataset.prestamo };
       const accion = boton.dataset.accion;
-      let datos = { token: sesion.token, prestamo_id: id };
+      const datos = { token: sesion.token, ...objetivo };
       let nombre = 'aprobar';
       if (accion === 'aprobar') datos.aprobar = true;
       if (accion === 'rechazar') {
@@ -296,12 +352,57 @@ function conectarGestion(contenedor, despues) {
   });
 }
 
-function formularioPrestamo(eq) {
+// ─── Salida: varios equipos para una misma actividad ────────────────────────
+
+/** Agrega un equipo a la salida consultando su estado. Devuelve un texto de confirmación. */
+async function agregarPorCodigo(codigo) {
+  if (salida.tiene(codigo)) return `${codigo} ya estaba en la lista.`;
+  const r = await llamar('equipos', { ids: [codigo] });
+  const eq = r.ok && r.equipos[0];
+  if (!eq || eq.error) return `${codigo}: ${eq?.error || r.error || 'no se pudo consultar.'}`;
+  if (eq.estado !== 'disponible') return `${eq.nombre} no está disponible (${(ESTADOS_EQUIPO[eq.estado] || eq.estado).toLowerCase()}).`;
+  salida.agregar(eq);
+  pintarCabecera();
+  return `Agregado: ${eq.nombre} (${eq.id}).`;
+}
+
+function guardarBorrador(form) {
+  const datos = {};
+  new FormData(form).forEach((v, k) => { if (typeof v === 'string') datos[k] = v; });
+  form.querySelectorAll('input[type=checkbox]').forEach(c => { datos[c.name] = c.checked; });
+  almacen.escribir('oan-borrador', datos);
+}
+
+function restaurarBorrador(form) {
+  const datos = almacen.leer('oan-borrador');
+  if (!datos) return;
+  Object.entries(datos).forEach(([k, v]) => {
+    const campo = form.elements[k];
+    if (!campo) return;
+    if (campo instanceof RadioNodeList) { campo.value = v; return; }
+    if (campo.type === 'checkbox') campo.checked = !!v;
+    else campo.value = v;
+  });
+}
+
+function vistaSalida() {
+  if (!sesion) return pedirSesion('?vista=salida');
+  const equipos = salida.equipos();
+  if (!equipos.length) {
+    return mostrar(`<h1>Mi salida</h1>
+      <p class="entrada">No hay equipos en la lista. Escanee el QR del primer equipo que va a sacar.</p>
+      <div class="acciones">${camaraDisponible() ? '<button class="principal" id="b-escanear">Escanear QR</button>' : ''}
+      <a class="boton secundario" href="./">Escribir un código</a></div>`)
+      || document.getElementById('b-escanear')?.addEventListener('click', escanearYVolver);
+  }
   const u = sesion.usuario || {};
   const externo = !u.interno;
   const ahora = new Date();
-  const maximo = new Date(ahora.getTime() + eq.max_dias * 864e5);
+  const maxDias = Math.min(...equipos.map(e => Number(e.max_dias) || 7));
+  const maximo = new Date(ahora.getTime() + maxDias * 864e5);
   const sugerida = new Date(Math.min(ahora.getTime() + 864e5, maximo.getTime()));
+  const conAprobacion = equipos.filter(e => e.nivel_control === 'restringido');
+
   const perfil = u.registrado ? '' : `
     <fieldset>
       <legend>Sus datos</legend>
@@ -321,59 +422,112 @@ function formularioPrestamo(eq) {
     </fieldset>`;
 
   mostrar(`
-    <p class="migas"><a href="?e=${esc(eq.id)}">${esc(eq.id)}</a></p>
-    <h1>Prestar ${esc(eq.nombre)}</h1>
+    <h1>${equipos.length > 1 ? `Préstamo de ${equipos.length} equipos` : `Prestar ${esc(equipos[0].nombre)}`}</h1>
+    <p class="entrada">Los datos de la actividad se escriben una sola vez para todos los equipos.</p>
     <form id="f-prestamo" novalidate>
+      <fieldset>
+        <legend>Equipos</legend>
+        <ul class="lista-salida">
+          ${equipos.map(e => `<li>
+            <span><strong>${esc(e.nombre)}</strong><br><span class="tenue">${esc(e.id)}${e.nivel_control === 'restringido' ? ' · requiere aprobación' : ''}</span></span>
+            <button type="button" class="quitar" data-quitar="${esc(e.id)}" aria-label="Quitar ${esc(e.nombre)}">Quitar</button>
+          </li>`).join('')}
+        </ul>
+        <div class="agregar-equipo">
+          ${camaraDisponible() ? '<button type="button" class="secundario" id="b-escanear">Escanear otro QR</button>' : ''}
+          <div class="fila-buscar">
+            <label class="oculto" for="otro-codigo">Código de otro equipo</label>
+            <input id="otro-codigo" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Código, p. ej. OAN-OCU-0001">
+            <button type="button" class="secundario" id="b-agregar">Agregar</button>
+          </div>
+          <p class="ayuda" id="msj-agregar" role="status"></p>
+        </div>
+      </fieldset>
       ${perfil}
       <fieldset>
-        <legend>Uso del equipo</legend>
-        <label for="proposito">¿Para qué lo va a usar?</label>
+        <legend>Actividad</legend>
+        <label for="proposito">¿Para qué ${equipos.length > 1 ? 'los' : 'lo'} va a usar?</label>
         <select id="proposito" name="proposito" required><option value="">Seleccione…</option>${opciones(catalogos.propositos)}</select>
         <label for="descripcion">Describa la actividad</label>
-        <textarea id="descripcion" name="descripcion" rows="2" maxlength="500" placeholder="Ej.: fotometría de estrellas variables para la práctica 4" required></textarea>
+        <textarea id="descripcion" name="descripcion" rows="2" maxlength="500" placeholder="Ej.: noche de observación pública del cúmulo de las Pléyades" required></textarea>
         <label for="curso">Curso, proyecto o evento <span class="opcional">(opcional)</span></label>
         <input id="curso" name="curso_proyecto" maxlength="150">
-        <label for="lugar">¿Dónde lo va a usar?</label>
+        <label for="lugar">¿Dónde ${equipos.length > 1 ? 'los' : 'lo'} va a usar?</label>
         <select id="lugar" name="lugar_uso" required>${opciones(catalogos.lugares, 'Dentro del OAN')}</select>
         <label for="prevista">Devolución prevista</label>
         <input id="prevista" name="fecha_prevista" type="datetime-local" min="${valorLocal(ahora)}" max="${valorLocal(maximo)}" value="${valorLocal(sugerida)}" required>
-        <p class="ayuda">Máximo ${esc(eq.max_dias)} día${eq.max_dias == 1 ? '' : 's'} (hasta el ${fecha(maximo)})</p>
+        <p class="ayuda">Máximo ${plural(maxDias, 'día', 'días')} (hasta el ${fecha(maximo)})${equipos.length > 1 ? ', según el equipo de plazo más corto' : ''}</p>
         ${externo ? `<label for="avalista">Correo institucional de su avalista</label>
           <input id="avalista" name="avalista_email" type="email" inputmode="email" placeholder="docente@unal.edu.co" required>
           <p class="ayuda">Docente o funcionario que responde por el préstamo.</p>` : ''}
       </fieldset>
       <fieldset>
-        <legend>Estado al recibirlo</legend>
-        <label class="casilla"><input type="radio" name="estado_salida" value="Bueno" checked><span>Está completo y en buen estado</span></label>
-        <label class="casilla"><input type="radio" name="estado_salida" value="obs"><span>Tiene observaciones</span></label>
-        <textarea name="obs_salida" rows="2" maxlength="300" placeholder="Describa rayones, piezas faltantes u otras novedades" hidden></textarea>
+        <legend>Estado al recibir${equipos.length > 1 ? 'los' : 'lo'}</legend>
+        <label class="casilla"><input type="radio" name="estado_salida" value="Bueno" checked><span>${equipos.length > 1 ? 'Están completos y en buen estado' : 'Está completo y en buen estado'}</span></label>
+        <label class="casilla"><input type="radio" name="estado_salida" value="obs"><span>Hay observaciones</span></label>
+        <textarea name="obs_salida" rows="2" maxlength="300" placeholder="Indique el equipo y la novedad: rayones, piezas faltantes…" hidden></textarea>
         <label class="casilla compromiso"><input type="checkbox" name="compromiso" required>
-          <span>Recibo el equipo y me comprometo a cuidarlo y devolverlo a tiempo.</span></label>
+          <span>Recibo ${equipos.length > 1 ? 'los equipos' : 'el equipo'} y me comprometo a cuidar${equipos.length > 1 ? 'los' : 'lo'} y devolver${equipos.length > 1 ? 'los' : 'lo'} a tiempo.</span></label>
       </fieldset>
-      <p class="ayuda" id="nota-aprobacion" hidden>Esta solicitud la debe aprobar el responsable del laboratorio antes de la entrega.</p>
+      <p class="ayuda" id="nota-aprobacion" hidden></p>
       <div class="acciones">
         <button type="submit" class="principal">Registrar préstamo</button>
-        <a class="boton secundario" href="?e=${esc(eq.id)}">Cancelar</a>
+        <button type="button" class="secundario" id="b-vaciar">Cancelar</button>
       </div>
     </form>`);
 
   const form = document.getElementById('f-prestamo');
+  restaurarBorrador(form);
   const actualizar = () => {
-    const requiere = eq.nivel_control === 'restringido' || externo || form.lugar_uso.value === 'Fuera del campus';
-    document.getElementById('nota-aprobacion').hidden = !requiere;
-    form.querySelector('button[type=submit]').textContent = requiere ? 'Enviar solicitud' : 'Registrar préstamo';
+    const todos = externo || form.lugar_uso.value === 'Fuera del campus';
+    const nota = document.getElementById('nota-aprobacion');
+    const n = todos ? equipos.length : conAprobacion.length;
+    nota.hidden = n === 0;
+    nota.textContent = todos
+      ? 'Esta solicitud la debe aprobar el responsable del laboratorio antes de la entrega.'
+      : `${n === equipos.length ? 'Estos equipos requieren' : `${plural(n, 'equipo requiere', 'equipos requieren')}`} aprobación del responsable; ${n === equipos.length ? '' : 'los demás salen de inmediato.'}`;
+    form.querySelector('button[type=submit]').textContent = n === equipos.length ? 'Enviar solicitud' : (equipos.length > 1 ? `Registrar préstamo de ${equipos.length} equipos` : 'Registrar préstamo');
     form.obs_salida.hidden = form.estado_salida.value !== 'obs';
   };
-  form.addEventListener('change', actualizar);
+  form.addEventListener('change', () => { actualizar(); guardarBorrador(form); });
+  form.addEventListener('input', () => guardarBorrador(form));
   actualizar();
+
+  form.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => {
+    guardarBorrador(form);
+    salida.quitar(b.dataset.quitar);
+    pintarCabecera();
+    vistaSalida();
+  }));
+  const msj = document.getElementById('msj-agregar');
+  const agregar = async () => {
+    const campo = document.getElementById('otro-codigo');
+    const codigo = codigoDe(campo.value) || campo.value.trim().toUpperCase();
+    if (!codigo) return;
+    guardarBorrador(form);
+    msj.textContent = 'Consultando…';
+    const texto = await agregarPorCodigo(codigo);
+    if (texto.startsWith('Agregado')) vistaSalida(); else msj.textContent = texto;
+  };
+  document.getElementById('b-agregar').addEventListener('click', agregar);
+  document.getElementById('otro-codigo').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); agregar(); } });
+  document.getElementById('b-escanear')?.addEventListener('click', () => { guardarBorrador(form); escanearYVolver(); });
+  document.getElementById('b-vaciar').addEventListener('click', () => {
+    if (!confirm('¿Descartar esta salida y su lista de equipos?')) return;
+    salida.vaciar();
+    pintarCabecera();
+    ir('./');
+  });
 
   form.addEventListener('submit', ev => {
     ev.preventDefault();
-    if (!form.compromiso.checked) return aviso(form, 'Marque la casilla de compromiso para continuar.');
+    if (form.nombre && form.nombre.value.trim().length < 3) return aviso(form, 'Escriba su nombre completo.');
     if (form.acepta_datos && !form.acepta_datos.checked) return aviso(form, 'Debe autorizar el tratamiento de datos para registrar el préstamo.');
+    if (!form.proposito.value) return aviso(form, 'Seleccione para qué va a usar los equipos.');
+    if (!form.compromiso.checked) return aviso(form, 'Marque la casilla de compromiso para continuar.');
     if (!form.fecha_prevista.value) return aviso(form, 'Indique la fecha y hora de devolución.');
     const datos = {
-      equipo_id: eq.id,
+      equipos: equipos.map(e => e.id),
       proposito: form.proposito.value,
       descripcion: form.descripcion.value,
       curso_proyecto: form.curso_proyecto.value,
@@ -393,48 +547,84 @@ function formularioPrestamo(eq) {
         sesion.usuario = { ...sesion.usuario, registrado: true, nombre: datos.perfil.nombre, tipo: datos.perfil.tipo };
         almacen.escribir('oan-sesion', sesion);
       }
-      comprobante(eq, r.prestamo, r.requiere_aprobacion ? 'solicitud' : 'prestamo');
+      salida.vaciar();
+      pintarCabecera();
+      comprobante(r.prestamos || [r.prestamo], 'prestamo');
     });
   });
 }
 
-function formularioDevolucion(eq, p) {
-  const comps = eq.componentes || [];
+function escanearYVolver() {
+  abrirEscaner(agregarPorCodigo).then(() => {
+    // Al cerrar el lector se redibuja la lista con lo agregado.
+    const vigilar = setInterval(() => {
+      if (!document.querySelector('.escaner')) { clearInterval(vigilar); vistaSalida(); }
+    }, 300);
+  });
+}
+
+// ─── Devolución (uno o varios equipos) ──────────────────────────────────────
+
+async function devolverSalida(loteId) {
+  cargando();
+  const r = await llamar('misPrestamos', { token: sesion.token });
+  if (!r.ok) return mostrar(`<p class="error">${esc(r.error)}</p>`);
+  const items = r.prestamos.filter(p => p.lote_id === loteId && p.estado === 'activo');
+  if (!items.length) return ir('?vista=mis', true);
+  formularioDevolucion(items);
+}
+
+async function formularioDevolucion(items) {
+  cargando();
+  const info = await llamar('equipos', { ids: items.map(p => p.equipo_id) });
+  const fichas = Object.fromEntries((info.equipos || []).map(e => [e.id, e]));
+  const varios = items.length > 1;
   mostrar(`
-    <p class="migas"><a href="?e=${esc(eq.id)}">${esc(eq.id)}</a></p>
-    <h1>Devolver ${esc(eq.nombre)}</h1>
+    ${varios ? '' : `<p class="migas"><a href="?e=${esc(items[0].equipo_id)}">${esc(items[0].equipo_id)}</a></p>`}
+    <h1>${varios ? `Devolver ${items.length} equipos` : `Devolver ${esc(items[0].equipo_nombre)}`}</h1>
+    <p class="entrada">Revise cada equipo y lo que incluye.${varios ? ' Desmarque los que todavía no devuelve.' : ''}</p>
     <form id="f-devolucion" novalidate>
-      ${comps.length ? `<fieldset>
-        <legend>Verifique que entrega todo</legend>
-        ${comps.map((c, i) => `<label class="casilla"><input type="checkbox" name="comp" value="${i}" checked><span>${esc(c)}</span></label>`).join('')}
-      </fieldset>` : ''}
-      <fieldset>
-        <legend>¿En qué estado lo entrega?</legend>
-        ${catalogos.condiciones.map((c, i) => `<label class="casilla"><input type="radio" name="condicion" value="${esc(c)}"${i === 0 ? ' checked' : ''}><span>${esc(c)}</span></label>`).join('')}
-        <label for="obs">Observaciones <span class="opcional" id="obs-req">(opcional)</span></label>
-        <textarea id="obs" name="observaciones" rows="3" maxlength="500" placeholder="Ej.: el buscador quedó desalineado"></textarea>
-      </fieldset>
+      ${items.map((p, i) => {
+        const comps = fichas[p.equipo_id]?.componentes || [];
+        return `<fieldset class="item-devolucion" data-equipo="${esc(p.equipo_id)}">
+          <legend>${varios ? `<label class="casilla-titulo"><input type="checkbox" name="incluir" value="${esc(p.equipo_id)}" checked> ` : ''}${esc(p.equipo_nombre)}${varios ? '</label>' : ''}</legend>
+          <p class="tenue codigo-linea">${esc(p.equipo_id)}${comps.length ? ` · Incluye: ${esc(comps.join(', '))}` : ''}</p>
+          <label for="cond-${i}">Estado en que lo entrega</label>
+          <select id="cond-${i}" name="condicion">${opciones(catalogos.condiciones, 'Bueno')}</select>
+          <label for="obs-${i}" class="obs-etiqueta">Observaciones <span class="opcional">(opcional)</span></label>
+          <textarea id="obs-${i}" name="observaciones" rows="2" maxlength="500" placeholder="Qué pasó o qué falta"></textarea>
+        </fieldset>`;
+      }).join('')}
       <div class="acciones">
         <button type="submit" class="principal">Registrar devolución</button>
-        <a class="boton secundario" href="?e=${esc(eq.id)}">Cancelar</a>
+        <a class="boton secundario" href="?vista=mis">Cancelar</a>
       </div>
     </form>`);
   const form = document.getElementById('f-devolucion');
-  const problema = () => ['Dañado', 'Incompleto'].includes(form.condicion.value) ||
-    [...form.querySelectorAll('[name=comp]')].some(c => !c.checked);
-  form.addEventListener('change', () => {
-    document.getElementById('obs-req').textContent = problema() ? '(obligatorio: describa el problema)' : '(opcional)';
-  });
+  const bloques = [...form.querySelectorAll('.item-devolucion')];
+  const refrescar = () => {
+    const incluidos = bloques.filter(b => b.querySelector('[name=incluir]')?.checked !== false);
+    bloques.forEach(b => {
+      const activo = b.querySelector('[name=incluir]')?.checked !== false;
+      b.classList.toggle('excluido', !activo);
+      const problema = ['Dañado', 'Incompleto'].includes(b.querySelector('[name=condicion]').value);
+      b.querySelector('.obs-etiqueta .opcional').textContent = problema ? '(obligatorio: describa el problema)' : '(opcional)';
+    });
+    form.querySelector('button[type=submit]').textContent = incluidos.length > 1 ? `Registrar devolución de ${incluidos.length} equipos` : 'Registrar devolución';
+  };
+  form.addEventListener('change', refrescar);
+  refrescar();
   form.addEventListener('submit', ev => {
     ev.preventDefault();
-    const faltan = [...form.querySelectorAll('[name=comp]')].filter(c => !c.checked).map(c => comps[c.value]);
-    if (problema() && form.observaciones.value.trim().length < 5) {
-      return aviso(form, 'Describa en las observaciones el daño o lo que falta.');
-    }
-    const obs = [faltan.length ? 'Faltan: ' + faltan.join(', ') + '.' : '', form.observaciones.value].filter(Boolean).join(' ');
-    enviar(form, 'devolver', {
-      equipo_id: eq.id, condicion: form.condicion.value, componentes_ok: faltan.length === 0, observaciones: obs
-    }, r => comprobante(eq, r.prestamo, r.requiere_verificacion ? 'devolucion-revision' : 'devolucion'));
+    const devoluciones = bloques.filter(b => b.querySelector('[name=incluir]')?.checked !== false).map(b => ({
+      equipo_id: b.dataset.equipo,
+      condicion: b.querySelector('[name=condicion]').value,
+      observaciones: b.querySelector('[name=observaciones]').value
+    }));
+    if (!devoluciones.length) return aviso(form, 'Marque al menos un equipo para devolver.');
+    const sinDescribir = devoluciones.find(d => ['Dañado', 'Incompleto'].includes(d.condicion) && d.observaciones.trim().length < 5);
+    if (sinDescribir) return aviso(form, `Describa el daño o lo que falta de ${sinDescribir.equipo_id}.`);
+    enviar(form, 'devolver', { devoluciones }, r => comprobante(r.prestamos || [r.prestamo], r.requiere_verificacion ? 'devolucion-revision' : 'devolucion'));
   });
 }
 
@@ -463,27 +653,37 @@ function formularioReporte(eq) {
   });
 }
 
-function comprobante(eq, p, tipo) {
-  const textos = {
-    prestamo: ['Préstamo registrado', 'Salida', p.fecha_salida, 'Recuerde escanear de nuevo el QR cuando lo devuelva.'],
-    solicitud: ['Solicitud enviada', 'Solicitado', p.fecha_solicitud, 'El responsable del laboratorio la revisará. Le llegará un correo con la respuesta; recoja el equipo cuando esté aprobada.'],
-    devolucion: ['Devolución registrada', 'Devuelto', p.fecha_devolucion, 'Gracias por devolver el equipo.'],
-    'devolucion-revision': ['Devolución registrada', 'Devuelto', p.fecha_devolucion, 'Deje el equipo en su lugar; el responsable del laboratorio lo revisará.']
-  }[tipo];
+function comprobante(prestamos, tipo) {
+  const p = prestamos[0];
+  const devolucion = tipo.startsWith('devolucion');
+  const pendientes = prestamos.filter(x => x.estado === 'pendiente').length;
+  const titulo = devolucion ? 'Devolución registrada'
+    : pendientes === prestamos.length ? 'Solicitud enviada'
+    : 'Préstamo registrado';
+  const hora = devolucion ? p.fecha_devolucion : (p.fecha_salida || p.fecha_solicitud);
+  const mensaje = devolucion
+    ? (tipo === 'devolucion-revision' ? 'Deje los equipos en su lugar; el responsable del laboratorio los revisará.' : 'Gracias por devolver a tiempo.')
+    : pendientes ? 'Los equipos pendientes los aprueba el responsable del laboratorio; le llegará un correo con la respuesta.'
+    : 'Al devolver, escanee de nuevo el QR de cualquiera de los equipos.';
   mostrar(`
     <section class="comprobante">
-      <h1>${textos[0]}</h1>
-      <p class="hora-grande">${fecha(textos[2])}</p>
+      <h1>${titulo}</h1>
+      <p class="hora-grande">${fecha(hora)}</p>
+      <ul class="prestamos">${prestamos.map(x => `
+        <li><span class="titulo-prestamo">${esc(x.equipo_nombre)}</span>
+        <span class="etiqueta etiqueta-${esc(x.estado)}">${esc(ESTADOS_PRESTAMO[x.estado] || x.estado)}</span>
+        <span class="detalle">${esc(x.equipo_id)}${devolucion ? ` · ${esc(x.condicion_devolucion)}` : ''}</span></li>`).join('')}</ul>
       <dl class="ficha">
-        <div><dt>Equipo</dt><dd>${esc(eq.nombre)}<br><span class="tenue">${esc(eq.id)}</span></dd></div>
         <div><dt>Responsable</dt><dd>${esc(p.nombre)}</dd></div>
-        ${tipo.startsWith('devolucion') ? `<div><dt>Estado</dt><dd>${esc(p.condicion_devolucion)}</dd></div>` : `<div><dt>Devolución prevista</dt><dd>${fecha(p.fecha_prevista)}</dd></div>`}
-        <div><dt>Número</dt><dd>${esc(p.id)}</dd></div>
+        ${devolucion ? '' : `<div><dt>Propósito</dt><dd>${esc(p.proposito)}</dd></div><div><dt>Devolución prevista</dt><dd>${fecha(p.fecha_prevista)}</dd></div>`}
+        <div><dt>Número de salida</dt><dd>${esc(p.lote_id || p.id)}</dd></div>
       </dl>
-      <p>${textos[3]} ${MODO_DEMO ? '' : 'También le enviamos este comprobante por correo.'}</p>
+      <p>${mensaje}</p>
       <div class="acciones"><a class="boton principal" href="?vista=mis">Ver mis préstamos</a><a class="boton secundario" href="./">Listo</a></div>
     </section>`);
 }
+
+// ─── Mis préstamos y panel ──────────────────────────────────────────────────
 
 async function vistaMisPrestamos() {
   if (!sesion) return pedirSesion('?vista=mis');
@@ -502,10 +702,36 @@ async function vistaMisPrestamos() {
     <h1>Mis préstamos</h1>
     <p class="entrada">${esc(r.usuario.nombre || r.usuario.email)}</p>
     <h2>Ahora</h2>
-    ${abiertos.length ? listaPrestamos(abiertos) : '<p class="vacio">No tiene equipos a su cargo. Para prestar uno, escanee su código QR.</p>'}
+    ${abiertos.length ? porSalida(abiertos).map(g => bloqueSalida(g, true)).join('') : '<p class="vacio">No tiene equipos a su cargo. Para prestar uno, escanee su código QR.</p>'}
     ${historial.length ? `<h2>Historial</h2>${listaPrestamos(historial)}` : ''}
     <p class="pie-sesion">${esc(r.usuario.email)} · <button class="enlace" id="salir">Cerrar sesión</button></p>`);
   document.getElementById('salir').addEventListener('click', () => cerrarSesion());
+  raiz.querySelectorAll('[data-devolver-lote]').forEach(b => b.addEventListener('click', () => {
+    formularioDevolucion(abiertos.filter(p => p.lote_id === b.dataset.devolverLote && p.estado === 'activo'));
+  }));
+  raiz.querySelectorAll('[data-cancelar-lote]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('¿Cancelar las solicitudes pendientes de esta salida?')) return;
+    b.disabled = true;
+    const c = await llamar('cancelar', { token: sesion.token, lote_id: b.dataset.cancelarLote });
+    if (!c.ok) alert(c.error);
+    vistaMisPrestamos();
+  }));
+}
+
+/** Una salida (varios equipos para una actividad) con sus acciones. */
+function bloqueSalida({ lote, items }, propio) {
+  const p = items[0];
+  const activos = items.filter(x => x.estado === 'activo').length;
+  const pendientes = items.filter(x => x.estado === 'pendiente').length;
+  return `<section class="salida">
+    <p class="salida-titulo"><strong>${esc(p.proposito)}</strong>${p.curso_proyecto ? ` · ${esc(p.curso_proyecto)}` : ''}<br>
+      <span class="tenue">${esc(p.descripcion)} · devolver el ${fecha(p.fecha_prevista)}</span></p>
+    ${listaPrestamos(items)}
+    ${propio && (activos || pendientes) ? `<div class="acciones compactas">
+      ${activos ? `<button class="principal" data-devolver-lote="${esc(lote)}">${activos > 1 ? `Devolver ${activos} equipos` : 'Devolver'}</button>` : ''}
+      ${pendientes ? `<button class="secundario" data-cancelar-lote="${esc(lote)}">Cancelar solicitud</button>` : ''}
+    </div>` : ''}
+  </section>`;
 }
 
 function listaPrestamos(lista, extra = () => '') {
@@ -526,18 +752,29 @@ async function vistaGestion() {
   if (!r.ok) return mostrar(`<h1>Panel del laboratorio</h1><p class="error">${esc(r.error)}</p>`);
   const g = r.gestion;
   if (!g) return mostrar('<h1>Panel del laboratorio</h1><p class="entrada">Su usuario no es responsable de ningún laboratorio. El administrador lo puede asignar en la hoja «Laboratorios».</p>');
-  const quien = p => `<span class="detalle">${esc(p.nombre)} · ${esc(p.proposito)}</span>`;
+  const quien = p => `<span class="detalle">${esc(p.nombre)} · <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`;
   const vencidos = g.activos.filter(p => p.vencido);
   const max = Math.max(1, ...Object.values(g.resumen.por_proposito));
+  const pendientes = porSalida(g.pendientes);
+  const porVerificar = porSalida(g.por_verificar);
   mostrar(`
     <h1>Panel del laboratorio</h1>
-    <p class="entrada">${g.pendientes.length + g.por_verificar.length ? `Tiene ${g.pendientes.length + g.por_verificar.length} asunto(s) por atender.` : 'No hay nada pendiente por atender.'}</p>
-    ${g.pendientes.length ? `<h2>Por aprobar</h2>${listaPrestamos(g.pendientes, p => `${quien(p)}
-      <div class="acciones compactas"><button class="principal" data-accion="aprobar">Aprobar</button><button class="secundario" data-accion="rechazar">Rechazar</button></div>`)}` : ''}
-    ${g.por_verificar.length ? `<h2>Devoluciones por verificar</h2>${listaPrestamos(g.por_verificar, p => `${quien(p)}
-      <span class="detalle">Entregado: ${esc(p.condicion_devolucion)}${p.obs_devolucion ? ` — ${esc(p.obs_devolucion)}` : ''}</span>
-      <div class="acciones compactas"><button class="principal" data-accion="verificar">Disponible</button><button class="secundario" data-accion="mantenimiento">A mantenimiento</button></div>`)}` : ''}
-    ${vencidos.length ? `<h2>Vencidos</h2>${listaPrestamos(vencidos, p => `${quien(p)}<a class="detalle" href="mailto:${esc(p.email)}">${esc(p.email)}</a>`)}` : ''}
+    <p class="entrada">${pendientes.length + porVerificar.length ? `Tiene ${plural(pendientes.length + porVerificar.length, 'asunto', 'asuntos')} por atender.` : 'No hay nada pendiente por atender.'}</p>
+    ${pendientes.length ? `<h2>Por aprobar</h2>${pendientes.map(s => `
+      <section class="salida" data-lote="${esc(s.lote)}">
+        <p class="salida-titulo"><strong>${esc(s.items[0].nombre)}</strong> · ${esc(s.items[0].proposito)}<br>
+        <span class="tenue">${esc(s.items[0].descripcion)} · ${esc(s.items[0].lugar_uso)} · hasta el ${fecha(s.items[0].fecha_prevista)}</span></p>
+        ${listaPrestamos(s.items)}
+        <div class="acciones compactas"><button class="principal" data-accion="aprobar">Aprobar y entregar${s.items.length > 1 ? ` (${s.items.length})` : ''}</button><button class="secundario" data-accion="rechazar">Rechazar</button></div>
+      </section>`).join('')}` : ''}
+    ${porVerificar.length ? `<h2>Devoluciones por verificar</h2>${porVerificar.map(s => `
+      <section class="salida" data-lote="${esc(s.lote)}">
+        <p class="salida-titulo"><strong>${esc(s.items[0].nombre)}</strong> · devuelto el ${fecha(s.items[0].fecha_devolucion)}</p>
+        ${listaPrestamos(s.items, p => `<span class="detalle">Entregado: ${esc(p.condicion_devolucion)}${p.obs_devolucion ? ` — ${esc(p.obs_devolucion)}` : ''}</span>
+          <div class="acciones compactas" data-prestamo="${esc(p.id)}"><button class="secundario" data-accion="mantenimiento">Enviar a mantenimiento</button></div>`)}
+        <div class="acciones compactas"><button class="principal" data-accion="verificar">${s.items.length > 1 ? `Todo en orden (${s.items.length})` : 'Revisado: disponible'}</button></div>
+      </section>`).join('')}` : ''}
+    ${vencidos.length ? `<h2>Vencidos</h2>${listaPrestamos(vencidos, quien)}` : ''}
     <h2>En préstamo</h2>
     ${g.activos.some(p => !p.vencido) ? listaPrestamos(g.activos.filter(p => !p.vencido), quien) : '<p class="vacio">No hay otros equipos prestados.</p>'}
     ${g.incidencias.length ? `<h2>Novedades abiertas</h2><ul class="prestamos">${g.incidencias.map(i => `
@@ -546,7 +783,7 @@ async function vistaGestion() {
       <span class="detalle">${esc(i.descripcion)}</span><span class="detalle tenue">${esc(i.email)} · ${fecha(i.fecha)}</span>
       <div class="acciones compactas"><button class="secundario" data-cerrar="${esc(i.id)}">Marcar resuelta</button></div></li>`).join('')}</ul>` : ''}
     <h2>Últimos 30 días</h2>
-    <p>${g.resumen.prestamos_30_dias} préstamo(s).</p>
+    <p>${plural(g.resumen.prestamos_30_dias, 'préstamo', 'préstamos')}.</p>
     ${Object.keys(g.resumen.por_proposito).length ? `<table class="barras"><caption>Préstamos por propósito</caption><tbody>${Object.entries(g.resumen.por_proposito).sort((a, b) => b[1] - a[1]).map(([k, v]) => `
       <tr><th scope="row">${esc(k)}</th><td><span class="barra" style="width:${Math.round(v / max * 100)}%"></span>${v}</td></tr>`).join('')}</tbody></table>` : ''}
     ${g.resumen.equipos_mas_usados.length ? `<h3>Equipos más usados</h3><ol class="ranking">${g.resumen.equipos_mas_usados.map(e => `<li><a href="?e=${esc(e.equipo_id)}">${esc(e.nombre)}</a> — ${e.prestamos}</li>`).join('')}</ol>` : ''}
@@ -569,7 +806,9 @@ function enrutar() {
   const p = new URLSearchParams(location.search);
   const equipo = p.get('e');
   const vista = p.get('vista');
+  pintarCabecera();
   if (equipo) return vistaEquipo(equipo);
+  if (vista === 'salida') return vistaSalida();
   if (vista === 'mis') return vistaMisPrestamos();
   if (vista === 'gestion') return vistaGestion();
   if (vista === 'entrar') return sesion ? ir('?vista=mis', true) : pedirSesion('?vista=mis');
@@ -594,5 +833,4 @@ document.getElementById('nocturno').addEventListener('click', () => {
 
 if (MODO_DEMO) document.getElementById('banda-demo').hidden = false;
 aplicarNocturno(almacen.leer('oan-nocturno') === true);
-pintarCabecera();
 enrutar();

@@ -16,6 +16,7 @@ Para exportar la hoja: Archivo → Descargar → Valores separados por comas (.c
 """
 import argparse
 import csv
+import os
 import re
 import sys
 
@@ -23,6 +24,7 @@ from reportlab.graphics import renderPDF
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib.pagesizes import A4, LETTER
+from reportlab.lib.utils import ImageReader
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
@@ -37,6 +39,18 @@ FORMATOS = {
     'grande': (2, 4, 99.1 * mm, 67.7 * mm, 13.0 * mm, 4.65 * mm, 2.5 * mm, 0),         # 8 por hoja (tipo L7165)
     'pequena': (4, 10, 48.5 * mm, 25.4 * mm, 21.5 * mm, 8.0 * mm, 0, 0),               # 40 por hoja, para estuches (sin textos fijos)
 }
+
+LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logo-oan.png')
+_logo = None
+
+
+def logo():
+    """Logo del OAN en su versión para fondo claro (las etiquetas se imprimen sobre blanco)."""
+    global _logo
+    if _logo is None and os.path.exists(LOGO):
+        _logo = ImageReader(LOGO)
+    return _logo
+
 
 PATRON_ID = re.compile(r'^OAN-[A-Z]{3}-\d{4}$')
 
@@ -129,13 +143,20 @@ def etiqueta(c, eq, x, y, ancho, alto, url_base, bordes):
     escala = min(alto / (38.1 * mm), disponible / (29 * mm))
     arriba = y + alto - pad
 
-    c.setFillGray(0.35)
-    tam_org = 5.8 * escala
-    c.setFont('Helvetica', tam_org)
-    for linea in partir(ORGANIZACION, 'Helvetica', tam_org, disponible, 2):
-        arriba -= tam_org
-        c.drawString(tx, arriba, linea)
-        arriba -= 0.8 * escala
+    imagen = logo()
+    if imagen:
+        ancho_img, alto_img = imagen.getSize()
+        alto_logo = 9.5 * mm * escala
+        c.drawImage(imagen, tx, arriba - alto_logo, height=alto_logo, width=alto_logo * ancho_img / alto_img, mask='auto')
+        arriba -= alto_logo + 0.4 * mm
+    else:
+        c.setFillGray(0.35)
+        tam_org = 5.8 * escala
+        c.setFont('Helvetica', tam_org)
+        for linea in partir(ORGANIZACION, 'Helvetica', tam_org, disponible, 2):
+            arriba -= tam_org
+            c.drawString(tx, arriba, linea)
+            arriba -= 0.8 * escala
 
     tam_codigo = 11.5 * escala
     while stringWidth(eq['id'], 'Helvetica-Bold', tam_codigo) > disponible and tam_codigo > 6:
@@ -148,7 +169,7 @@ def etiqueta(c, eq, x, y, ancho, alto, url_base, bordes):
     tam_nombre = 7.4 * escala
     c.setFont('Helvetica', tam_nombre)
     arriba -= 1.2 * mm
-    for linea in partir(eq['nombre'], 'Helvetica', tam_nombre, disponible, 3):
+    for linea in partir(eq['nombre'], 'Helvetica', tam_nombre, disponible, 2):
         arriba -= tam_nombre * 1.15
         c.drawString(tx, arriba, linea)
 

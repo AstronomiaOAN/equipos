@@ -6,7 +6,7 @@ Los laboratorios del Observatorio Astronómico Nacional (OAN) prestan telescopio
 
 ## Propuesta
 
-Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el QR con la cámara del celular, se identifica con su correo y llena un formulario corto. El sistema guarda automáticamente la **fecha y hora de salida**. Al devolverlo, escanea el mismo QR, indica en qué estado lo entrega y el sistema guarda la **fecha y hora de devolución**. Todo alimenta una base de datos central que el responsable de cada laboratorio consulta desde el celular o el computador.
+Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el QR con la cámara del celular, se identifica con su correo y llena un formulario corto. Como para una práctica o una noche de observación casi siempre salen varios equipos juntos (telescopio, montura, oculares, cámara…), el formulario permite **agregar todos los equipos de la actividad escaneándolos uno tras otro**, y los datos de la actividad se escriben **una sola vez**. El sistema guarda automáticamente la **fecha y hora de salida**. Al devolverlo, escanea el mismo QR, indica en qué estado lo entrega y el sistema guarda la **fecha y hora de devolución**. Todo alimenta una base de datos central que el responsable de cada laboratorio consulta desde el celular o el computador.
 
 ## Objetivos
 
@@ -19,7 +19,7 @@ Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el Q
 ## Qué cubre
 
 - Equipos y materiales inventariables de los laboratorios del OAN: telescopios y tubos ópticos, monturas, cámaras, espectrógrafos y fotómetros, oculares y filtros, computadores, instrumentos de medición, kits de divulgación.
-- Préstamo, devolución, aprobación, verificación y reporte de daños.
+- Préstamo y devolución de uno o varios equipos a la vez («salidas»), aprobación, verificación y reporte de daños.
 - Alertas por correo y un panel para los responsables.
 
 ## Qué no cubre (por ahora)
@@ -46,5 +46,7 @@ No todos los equipos necesitan el mismo cuidado. Cada uno tiene un nivel:
 | **Libre** | Se presta y se devuelve solo con el QR | Kits de divulgación, oculares básicos, refractores pequeños |
 | **Supervisado** | Se presta con el QR; el responsable recibe aviso de la salida y revisa la devolución antes de volver a prestarlo | Telescopios grandes, monturas, portátiles |
 | **Restringido** | El QR crea una solicitud; el responsable la aprueba al entregar el equipo y revisa la devolución | Cámaras científicas, espectrógrafos, instrumentos calibrados |
+
+En una salida con equipos de distintos niveles, cada equipo sigue su propia regla: los libres y supervisados salen de inmediato y los restringidos quedan esperando la aprobación, sin que la persona tenga que llenar dos formularios.
 
 Además, **cualquier préstamo de un usuario externo o para usar fuera del campus requiere aprobación**, sin importar el nivel del equipo (esto se puede cambiar en la configuración).

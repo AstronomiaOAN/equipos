@@ -15,6 +15,7 @@ const CONFIG = {
   NOMBRE_SISTEMA: 'Préstamo de equipos · OAN',
   URL_WEB: 'https://astronomiaoan.github.io/equipos/',
   DOMINIOS_INTERNOS: ['unal.edu.co'],     // correos considerados institucionales
+  CORREOS_INTERNOS: ['oan.unal@gmail.com'], // cuentas fuera de esos dominios que también son del OAN
   PERMITIR_EXTERNOS: true,                // ¿pueden iniciar sesión correos no institucionales?
   APROBAR_FUERA_DEL_CAMPUS: true,         // préstamos fuera del campus requieren aprobación
   DIAS_TOKEN: 30,                         // vigencia de la sesión en el celular
@@ -23,7 +24,11 @@ const CONFIG = {
   MAX_ENVIOS_CODIGO: 3,                   // por correo cada 10 minutos
   HORAS_RECORDATORIO: 24,                 // aviso antes del vencimiento
   MAX_DIAS_POR_DEFECTO: 7,
-  CORREO_COPIA_ALERTAS: ''                // opcional: correo que recibe copia de las alertas
+  MAX_EQUIPOS_POR_SALIDA: 30,
+  CORREO_COPIA_ALERTAS: '',               // opcional: correo que recibe copia de las alertas
+  // Una cuenta @gmail.com puede enviar unos 100 correos al día. Si se agota, desactive los
+  // comprobantes (la web ya los muestra en pantalla); los avisos al laboratorio se mantienen.
+  CORREO_COMPROBANTES: true
 };
 
 const HOJAS = {
@@ -36,7 +41,7 @@ const HOJAS = {
     'curso_proyecto', 'lugar_uso', 'avalista_email', 'fecha_solicitud', 'fecha_salida',
     'fecha_prevista', 'fecha_devolucion', 'estado', 'condicion_salida', 'condicion_devolucion',
     'obs_devolucion', 'componentes_ok', 'devuelto_por', 'aprobado_por', 'motivo_rechazo',
-    'verificado_por', 'fecha_verificacion', 'recordatorio_enviado'],
+    'verificado_por', 'fecha_verificacion', 'recordatorio_enviado', 'lote_id'],
   Incidencias: ['id', 'equipo_id', 'prestamo_id', 'email', 'tipo', 'descripcion', 'fecha',
     'estado', 'resuelto_por', 'fecha_cierre', 'solucion'],
   Bitacora: ['fecha', 'email', 'accion', 'detalle']
@@ -94,6 +99,7 @@ const ACCIONES = {
   verificarCodigo: accionVerificarCodigo_,
   perfil: accionPerfil_,
   equipo: accionEquipo_,
+  equipos: accionEquipos_,
   prestar: conBloqueo_(accionPrestar_),
   devolver: conBloqueo_(accionDevolver_),
   cancelar: conBloqueo_(accionCancelar_),
@@ -294,6 +300,10 @@ function accionEquipo_(d) {
       es_mio: mio
     };
     if (mio || gestor) Object.assign(prestamo, prestamoPublico_(abierto, eq));
+    if (mio && abierto.lote_id) {
+      prestamo.activos_en_salida = leer_('Prestamos').filter(x => x.lote_id === abierto.lote_id &&
+        x.email === email && x.estado === 'activo').length;
+    }
   }
   return {
     equipo: equipoPublico_(eq, lab),
@@ -303,7 +313,24 @@ function accionEquipo_(d) {
   };
 }
 
-// ─── Préstamo ───────────────────────────────────────────────────────────────
+// ─── Varios equipos a la vez (para armar una salida) ────────────────────────
+
+/** Ficha corta de varios equipos, para validar la lista antes de prestar. */
+function accionEquipos_(d) {
+  const ids = idsDe_(d.ids);
+  const labs = indice_(leer_('Laboratorios'));
+  const equipos = ids.map(id => {
+    try {
+      const eq = buscarEquipo_(id);
+      return equipoPublico_(eq, labs[eq.laboratorio_id] || buscarLaboratorio_(eq.laboratorio_id));
+    } catch (err) {
+      return { id: id, error: err.message };
+    }
+  });
+  return { equipos: equipos };
+}
+
+// ─── Préstamo (uno o varios equipos para una misma actividad) ───────────────
 
 function accionPrestar_(d) {
   const s = sesion_(d.token);
@@ -311,23 +338,27 @@ function accionPrestar_(d) {
   if (d.perfil) usuario = guardarPerfil_(s.email, d.perfil);
   if (!usuario) throw new ErrorApp('Complete su perfil antes de solicitar un préstamo.');
 
-  const eq = buscarEquipo_(d.equipo_id);
-  if (eq.estado !== 'disponible') {
-    throw new ErrorApp('El equipo no está disponible (estado: ' + eq.estado.replace('_', ' ') + ').', 409);
+  const equipos = idsDe_(d.equipos || d.equipo_id).map(buscarEquipo_);
+  const ocupados = equipos.filter(e => e.estado !== 'disponible');
+  if (ocupados.length) {
+    throw new ErrorApp('No están disponibles: ' +
+      ocupados.map(e => e.id + ' (' + e.estado.replace('_', ' ') + ')').join(', ') + '. Quítelos de la lista.', 409);
   }
   const proposito = enLista_(d.proposito, CATALOGOS.propositos, 'el propósito');
   const lugar = enLista_(d.lugar_uso, CATALOGOS.lugares, 'el lugar de uso');
   const descripcion = texto_(d.descripcion, 500);
-  if (descripcion.length < 5) throw new ErrorApp('Describa brevemente para qué usará el equipo.');
+  if (descripcion.length < 5) throw new ErrorApp('Describa brevemente para qué usará los equipos.');
 
   const ahora = new Date();
   const prevista = new Date(d.fecha_prevista);
-  const maxDias = Number(eq.max_dias) || CONFIG.MAX_DIAS_POR_DEFECTO;
+  const maxDias = Math.min.apply(null, equipos.map(e => Number(e.max_dias) || CONFIG.MAX_DIAS_POR_DEFECTO));
   if (isNaN(prevista.getTime()) || prevista <= ahora) {
     throw new ErrorApp('Indique una fecha y hora de devolución posterior al momento actual.');
   }
   if (prevista.getTime() - ahora.getTime() > maxDias * 864e5 + 36e5) {
-    throw new ErrorApp('Este equipo se presta máximo ' + maxDias + ' día(s).');
+    throw new ErrorApp(equipos.length > 1
+      ? 'Con estos equipos el plazo máximo es de ' + maxDias + ' día(s).'
+      : 'Este equipo se presta máximo ' + maxDias + ' día(s).');
   }
 
   const externo = usuario.tipo === 'Externo';
@@ -338,155 +369,231 @@ function accionPrestar_(d) {
       throw new ErrorApp('Los usuarios externos necesitan un avalista con correo institucional.');
     }
   }
-  const requiereAprobacion = eq.nivel_control === 'restringido' || externo ||
-    (CONFIG.APROBAR_FUERA_DEL_CAMPUS && lugar === 'Fuera del campus');
+  const aprobacionGeneral = externo || (CONFIG.APROBAR_FUERA_DEL_CAMPUS && lugar === 'Fuera del campus');
+  const loteId = nuevoId_('L');
+  const condicion = texto_(d.condicion_salida, 300) || 'Bueno';
 
-  const p = {
-    id: nuevoId_('P'),
-    equipo_id: eq.id,
-    email: s.email,
-    nombre: usuario.nombre,
-    tipo_usuario: usuario.tipo,
-    proposito: proposito,
-    descripcion: descripcion,
-    curso_proyecto: texto_(d.curso_proyecto, 150),
-    lugar_uso: lugar,
-    avalista_email: avalista,
-    fecha_solicitud: ahora,
-    fecha_salida: requiereAprobacion ? '' : ahora,
-    fecha_prevista: prevista,
-    estado: requiereAprobacion ? 'pendiente' : 'activo',
-    condicion_salida: texto_(d.condicion_salida, 300) || 'Bueno'
-  };
-  agregar_('Prestamos', p);
-  actualizar_('Equipos', eq, { estado: requiereAprobacion ? 'reservado' : 'prestado' });
-  bitacora_(s.email, requiereAprobacion ? 'solicitud_prestamo' : 'prestamo', p.id + ' ' + eq.id);
+  // Todo validado: se registra cada equipo con los datos comunes de la actividad.
+  const items = equipos.map(eq => {
+    const requiere = aprobacionGeneral || eq.nivel_control === 'restringido';
+    const p = {
+      id: nuevoId_('P'), lote_id: loteId, equipo_id: eq.id, email: s.email, nombre: usuario.nombre,
+      tipo_usuario: usuario.tipo, proposito: proposito, descripcion: descripcion,
+      curso_proyecto: texto_(d.curso_proyecto, 150), lugar_uso: lugar, avalista_email: avalista,
+      fecha_solicitud: ahora, fecha_salida: requiere ? '' : ahora, fecha_prevista: prevista,
+      estado: requiere ? 'pendiente' : 'activo', condicion_salida: condicion
+    };
+    agregar_('Prestamos', p);
+    actualizar_('Equipos', eq, { estado: requiere ? 'reservado' : 'prestado' });
+    return { p: p, eq: eq, requiere: requiere };
+  });
+  bitacora_(s.email, 'prestamo', loteId + ': ' + items.map(i => i.eq.id + (i.requiere ? ' (pendiente)' : '')).join(', '));
 
-  const lab = buscarLaboratorio_(eq.laboratorio_id);
-  const detalle = detallePrestamo_(p, eq);
-  if (requiereAprobacion) {
-    avisarResponsables_(lab, 'Solicitud de préstamo por aprobar: ' + eq.nombre,
-      ['<b>' + esc_(p.nombre) + '</b> solicita el equipo. Apruébela o recházela en la web.']
-        .concat(detalle).concat([enlace_('?vista=gestion', 'Abrir panel del laboratorio')]), avalista);
-    enviarCorreo_(s.email, 'Solicitud recibida: ' + eq.nombre,
-      ['Su solicitud quedó pendiente de aprobación por el responsable del laboratorio.'].concat(detalle));
-  } else {
-    if (eq.nivel_control === 'supervisado') {
-      avisarResponsables_(lab, 'Salida de equipo supervisado: ' + eq.nombre, detalle);
+  porLaboratorio_(items).forEach(grupo => {
+    const pendientes = grupo.items.filter(i => i.requiere);
+    const supervisados = grupo.items.filter(i => !i.requiere && i.eq.nivel_control === 'supervisado');
+    if (pendientes.length) {
+      avisarResponsables_(grupo.lab, 'Solicitud por aprobar: ' + resumenEquipos_(pendientes),
+        ['<b>' + esc_(usuario.nombre) + '</b> solicita ' + (pendientes.length > 1 ? 'estos equipos' : 'este equipo') +
+          '. Apruebe o rechace en la web.', detalleSalida_(pendientes)]
+          .concat([enlace_('?vista=gestion', 'Abrir panel del laboratorio')]), avalista);
     }
-    enviarCorreo_(s.email, 'Comprobante de préstamo: ' + eq.nombre,
-      ['Quedó registrado el préstamo. Recuerde devolverlo a tiempo y escanear el QR al entregarlo.']
-        .concat(detalle));
-  }
-  return { prestamo: prestamoPublico_(p, eq), requiere_aprobacion: requiereAprobacion };
+    if (supervisados.length) {
+      avisarResponsables_(grupo.lab, 'Salida de equipo supervisado: ' + resumenEquipos_(supervisados),
+        [detalleSalida_(supervisados)]);
+    }
+  });
+  const algunoPendiente = items.some(i => i.requiere);
+  if (algunoPendiente || CONFIG.CORREO_COMPROBANTES) enviarCorreo_(s.email, (algunoPendiente ? 'Solicitud recibida: ' : 'Comprobante de préstamo: ') + resumenEquipos_(items), [
+    algunoPendiente
+      ? 'Los equipos marcados como «pendiente» esperan la aprobación del responsable del laboratorio.'
+      : 'Quedó registrado el préstamo. Recuerde escanear el QR de cada equipo al devolverlo.',
+    detalleSalida_(items)
+  ]);
+  return {
+    lote_id: loteId,
+    prestamos: items.map(i => prestamoPublico_(i.p, i.eq)),
+    requiere_aprobacion: algunoPendiente,
+    prestamo: prestamoPublico_(items[0].p, items[0].eq)
+  };
 }
 
 function accionCancelar_(d) {
   const s = sesion_(d.token);
-  const p = buscarPrestamo_(d.prestamo_id);
-  if (p.email !== s.email) throw new ErrorApp('Solo puede cancelar sus propias solicitudes.', 403);
-  if (p.estado !== 'pendiente') throw new ErrorApp('Solo se pueden cancelar solicitudes pendientes.', 409);
-  actualizar_('Prestamos', p, { estado: 'cancelado' });
-  const eq = buscarEquipo_(p.equipo_id);
-  if (eq.estado === 'reservado') actualizar_('Equipos', eq, { estado: 'disponible' });
-  bitacora_(s.email, 'cancelacion', p.id);
-  return { prestamo: prestamoPublico_(p, eq) };
+  const lista = prestamosObjetivo_(d).filter(p => p.estado === 'pendiente' && p.email === s.email);
+  if (!lista.length) throw new ErrorApp('No hay solicitudes pendientes suyas para cancelar.', 409);
+  lista.forEach(p => {
+    actualizar_('Prestamos', p, { estado: 'cancelado' });
+    const eq = buscarEquipo_(p.equipo_id);
+    if (eq.estado === 'reservado') actualizar_('Equipos', eq, { estado: 'disponible' });
+  });
+  bitacora_(s.email, 'cancelacion', lista.map(p => p.id).join(', '));
+  return { cancelados: lista.length };
 }
 
 // ─── Aprobación (equipos restringidos, externos, fuera del campus) ──────────
 
 function accionAprobar_(d) {
   const s = sesion_(d.token);
-  const p = buscarPrestamo_(d.prestamo_id);
-  const eq = buscarEquipo_(p.equipo_id);
-  exigirResponsable_(s, eq);
-  if (p.estado !== 'pendiente') throw new ErrorApp('La solicitud ya fue atendida.', 409);
+  const items = atendibles_(s, prestamosObjetivo_(d), 'pendiente', 'No hay solicitudes pendientes para atender.');
+  const motivo = texto_(d.motivo, 300);
+  if (!d.aprobar && motivo.length < 3) throw new ErrorApp('Indique el motivo del rechazo.');
 
-  if (d.aprobar) {
-    actualizar_('Prestamos', p, { estado: 'activo', fecha_salida: new Date(), aprobado_por: s.email });
-    actualizar_('Equipos', eq, { estado: 'prestado' });
-    enviarCorreo_(p.email, 'Préstamo aprobado: ' + eq.nombre,
-      ['Su solicitud fue aprobada y el equipo quedó entregado a su nombre.'].concat(detallePrestamo_(p, eq)));
-  } else {
-    const motivo = texto_(d.motivo, 300);
-    if (motivo.length < 3) throw new ErrorApp('Indique el motivo del rechazo.');
-    actualizar_('Prestamos', p, { estado: 'rechazado', aprobado_por: s.email, motivo_rechazo: motivo });
-    actualizar_('Equipos', eq, { estado: 'disponible' });
-    enviarCorreo_(p.email, 'Solicitud no aprobada: ' + eq.nombre,
-      ['Su solicitud no fue aprobada. Motivo: ' + esc_(motivo)]);
-  }
-  bitacora_(s.email, d.aprobar ? 'aprobacion' : 'rechazo', p.id);
-  return { prestamo: prestamoPublico_(p, eq) };
+  items.forEach(i => {
+    if (d.aprobar) {
+      actualizar_('Prestamos', i.p, { estado: 'activo', fecha_salida: new Date(), aprobado_por: s.email });
+      actualizar_('Equipos', i.eq, { estado: 'prestado' });
+    } else {
+      actualizar_('Prestamos', i.p, { estado: 'rechazado', aprobado_por: s.email, motivo_rechazo: motivo });
+      actualizar_('Equipos', i.eq, { estado: 'disponible' });
+    }
+  });
+  const p0 = items[0].p;
+  enviarCorreo_(p0.email, (d.aprobar ? 'Préstamo aprobado: ' : 'Solicitud no aprobada: ') + resumenEquipos_(items),
+    d.aprobar
+      ? ['Su solicitud fue aprobada y los equipos quedaron entregados a su nombre.', detalleSalida_(items)]
+      : ['Su solicitud no fue aprobada. Motivo: ' + esc_(motivo), detalleSalida_(items)]);
+  bitacora_(s.email, d.aprobar ? 'aprobacion' : 'rechazo', items.map(i => i.p.id).join(', '));
+  const pub = items.map(i => prestamoPublico_(i.p, i.eq));
+  return { prestamos: pub, prestamo: pub[0] };
 }
 
-// ─── Devolución ─────────────────────────────────────────────────────────────
+// ─── Devolución (uno o varios equipos) ──────────────────────────────────────
 
 function accionDevolver_(d) {
   const s = sesion_(d.token);
-  const eq = buscarEquipo_(d.equipo_id);
-  const p = prestamoAbiertoDe_(eq.id);
-  if (!p || p.estado !== 'activo') throw new ErrorApp('Este equipo no tiene un préstamo activo.', 409);
-  const gestor = esResponsable_(s.email, eq.laboratorio_id, s.usuario);
-  if (p.email !== s.email && !gestor) {
-    throw new ErrorApp('Solo quien tiene el préstamo o un responsable del laboratorio puede registrar la devolución.', 403);
-  }
-  const condicion = enLista_(d.condicion, CATALOGOS.condiciones, 'el estado del equipo');
-  const componentesOk = d.componentes_ok !== false;
-  const obs = texto_(d.observaciones, 500);
-  const problema = condicion === 'Dañado' || condicion === 'Incompleto' || !componentesOk;
-  if (problema && obs.length < 5) throw new ErrorApp('Describa el daño o el faltante en las observaciones.');
+  const pedidos = Array.isArray(d.devoluciones) ? d.devoluciones : [d];
+  if (!pedidos.length) throw new ErrorApp('No indicó qué equipos devuelve.');
+  if (pedidos.length > CONFIG.MAX_EQUIPOS_POR_SALIDA) throw new ErrorApp('Demasiados equipos en una sola devolución.');
 
-  // Si devuelve el propio responsable, la verificación queda hecha en el acto.
-  const requiereVerificacion = !gestor && (eq.nivel_control !== 'libre' || problema);
+  // Primero se valida todo; si algo falla no se registra nada.
+  const vistos = {};
+  const items = pedidos.map(pedido => {
+    const eq = buscarEquipo_(pedido.equipo_id);
+    if (vistos[eq.id]) throw new ErrorApp('El equipo ' + eq.id + ' está repetido.');
+    vistos[eq.id] = true;
+    const p = prestamoAbiertoDe_(eq.id);
+    if (!p || p.estado !== 'activo') throw new ErrorApp(eq.id + ' no tiene un préstamo activo.', 409);
+    const gestor = esResponsable_(s.email, eq.laboratorio_id, s.usuario);
+    if (p.email !== s.email && !gestor) {
+      throw new ErrorApp('Solo quien tiene el préstamo de ' + eq.id + ' o un responsable del laboratorio puede registrar la devolución.', 403);
+    }
+    const condicion = enLista_(pedido.condicion, CATALOGOS.condiciones, 'el estado de ' + eq.id);
+    const componentesOk = pedido.componentes_ok !== false && condicion !== 'Incompleto';
+    const obs = texto_(pedido.observaciones, 500);
+    const problema = condicion === 'Dañado' || !componentesOk;
+    if (problema && obs.length < 5) throw new ErrorApp('Describa el daño o el faltante de ' + eq.id + '.');
+    return { eq: eq, p: p, gestor: gestor, condicion: condicion, componentesOk: componentesOk, obs: obs, problema: problema };
+  });
+
   const ahora = new Date();
-  const cambios = {
-    fecha_devolucion: ahora,
-    condicion_devolucion: condicion,
-    obs_devolucion: obs,
-    componentes_ok: componentesOk ? 'SÍ' : 'NO',
-    devuelto_por: s.email,
-    estado: requiereVerificacion ? 'por_verificar' : 'devuelto'
+  items.forEach(i => {
+    i.verificar = !i.gestor && (i.eq.nivel_control !== 'libre' || i.problema);
+    const cambios = {
+      fecha_devolucion: ahora, condicion_devolucion: i.condicion, obs_devolucion: i.obs,
+      componentes_ok: i.componentesOk ? 'SÍ' : 'NO', devuelto_por: s.email,
+      estado: i.verificar ? 'por_verificar' : 'devuelto'
+    };
+    if (i.gestor) Object.assign(cambios, { verificado_por: s.email, fecha_verificacion: ahora });
+    actualizar_('Prestamos', i.p, cambios);
+    i.estadoEquipo = i.verificar ? 'en_revision' : (i.problema ? 'mantenimiento' : 'disponible');
+    actualizar_('Equipos', i.eq, { estado: i.estadoEquipo });
+    if (i.problema) {
+      agregar_('Incidencias', {
+        id: nuevoId_('I'), equipo_id: i.eq.id, prestamo_id: i.p.id, email: s.email,
+        tipo: i.condicion === 'Dañado' ? 'Daño' : 'Faltante', descripcion: i.obs, fecha: ahora, estado: 'abierta'
+      });
+    }
+  });
+  bitacora_(s.email, 'devolucion', items.map(i => i.p.id + ' ' + i.condicion).join(', '));
+
+  porLaboratorio_(items.filter(i => i.verificar)).forEach(grupo => {
+    const conNovedad = grupo.items.some(i => i.problema);
+    avisarResponsables_(grupo.lab, (conNovedad ? 'Devolución con novedad: ' : 'Devolución por verificar: ') +
+      resumenEquipos_(grupo.items), [detalleSalida_(grupo.items, true), enlace_('?vista=gestion', 'Verificar en el panel')]);
+  });
+  const titular = items[0].p.email;
+  if (CONFIG.CORREO_COMPROBANTES) enviarCorreo_(titular, 'Comprobante de devolución: ' + resumenEquipos_(items),
+    ['Quedó registrada la devolución.', detalleSalida_(items, true)]);
+
+  const pub = items.map(i => Object.assign(prestamoPublico_(i.p, i.eq),
+    { estado_equipo: i.estadoEquipo, requiere_verificacion: i.verificar }));
+  return {
+    prestamos: pub,
+    requiere_verificacion: items.some(i => i.verificar),
+    // Compatibilidad con la devolución de un solo equipo
+    prestamo: pub[0], estado_equipo: items[0].estadoEquipo
   };
-  if (gestor) Object.assign(cambios, { verificado_por: s.email, fecha_verificacion: ahora });
-  actualizar_('Prestamos', p, cambios);
-
-  const estadoEquipo = requiereVerificacion ? 'en_revision' : (problema ? 'mantenimiento' : 'disponible');
-  actualizar_('Equipos', eq, { estado: estadoEquipo });
-
-  if (problema) {
-    agregar_('Incidencias', {
-      id: nuevoId_('I'), equipo_id: eq.id, prestamo_id: p.id, email: s.email,
-      tipo: condicion === 'Dañado' ? 'Daño' : 'Faltante', descripcion: obs, fecha: ahora, estado: 'abierta'
-    });
-  }
-  bitacora_(s.email, 'devolucion', p.id + ' ' + condicion);
-
-  const lab = buscarLaboratorio_(eq.laboratorio_id);
-  const detalle = detallePrestamo_(p, eq);
-  if (requiereVerificacion) {
-    avisarResponsables_(lab, (problema ? 'Devolución con novedad: ' : 'Devolución por verificar: ') + eq.nombre,
-      detalle.concat([enlace_('?vista=gestion', 'Verificar en el panel')]));
-  }
-  enviarCorreo_(p.email, 'Comprobante de devolución: ' + eq.nombre,
-    ['Quedó registrada la devolución (' + esc_(condicion) + ').'].concat(detalle));
-  return { prestamo: prestamoPublico_(p, eq), estado_equipo: estadoEquipo, requiere_verificacion: requiereVerificacion };
 }
 
 function accionVerificar_(d) {
   const s = sesion_(d.token);
-  const p = buscarPrestamo_(d.prestamo_id);
-  const eq = buscarEquipo_(p.equipo_id);
-  exigirResponsable_(s, eq);
-  if (p.estado !== 'por_verificar') throw new ErrorApp('Esta devolución no está pendiente de verificación.', 409);
+  const items = atendibles_(s, prestamosObjetivo_(d), 'por_verificar', 'No hay devoluciones por verificar.');
   const obs = texto_(d.observaciones, 500);
-  actualizar_('Prestamos', p, {
-    estado: 'devuelto', verificado_por: s.email, fecha_verificacion: new Date(),
-    obs_devolucion: [p.obs_devolucion, obs ? 'Verificación: ' + obs : ''].filter(String).join(' · ')
-  });
   const estado = d.enviar_mantenimiento ? 'mantenimiento' : 'disponible';
-  actualizar_('Equipos', eq, { estado: estado });
-  bitacora_(s.email, 'verificacion', p.id + ' → ' + estado);
-  return { prestamo: prestamoPublico_(p, eq), estado_equipo: estado };
+  items.forEach(i => {
+    actualizar_('Prestamos', i.p, {
+      estado: 'devuelto', verificado_por: s.email, fecha_verificacion: new Date(),
+      obs_devolucion: [i.p.obs_devolucion, obs ? 'Verificación: ' + obs : ''].filter(String).join(' · ')
+    });
+    actualizar_('Equipos', i.eq, { estado: estado });
+  });
+  bitacora_(s.email, 'verificacion', items.map(i => i.p.id).join(', ') + ' → ' + estado);
+  const pub = items.map(i => prestamoPublico_(i.p, i.eq));
+  return { prestamos: pub, prestamo: pub[0], estado_equipo: estado };
+}
+
+/** Préstamos en el estado dado que el responsable puede atender. */
+function atendibles_(s, prestamos, estado, siNoHay) {
+  const enEstado = conEquipo_(prestamos.filter(p => p.estado === estado));
+  if (!enEstado.length) throw new ErrorApp(siNoHay, 409);
+  const propios = enEstado.filter(i => esResponsable_(s.email, i.eq.laboratorio_id, s.usuario));
+  if (!propios.length) throw new ErrorApp('Solo el responsable del laboratorio puede hacer esta acción.', 403);
+  return propios;
+}
+
+/** Préstamos indicados por prestamo_id o por lote_id (todos los de esa salida). */
+function prestamosObjetivo_(d) {
+  if (d.lote_id) {
+    // Préstamos registrados antes de existir las salidas usan su propio id como lote.
+    return leer_('Prestamos').filter(p => (p.lote_id || p.id) === d.lote_id);
+  }
+  if (d.prestamo_id) return [buscarPrestamo_(d.prestamo_id)];
+  throw new ErrorApp('Falta indicar el préstamo.');
+}
+
+function conEquipo_(prestamos) {
+  const equipos = indice_(leer_('Equipos'));
+  return prestamos.filter(p => equipos[p.equipo_id]).map(p => {
+    const eq = equipos[p.equipo_id];
+    eq.estado = String(eq.estado || '').trim().toLowerCase();
+    eq.nivel_control = String(eq.nivel_control || 'libre').trim().toLowerCase();
+    return { p: p, eq: eq };
+  });
+}
+
+function idsDe_(valor) {
+  const lista = (Array.isArray(valor) ? valor : [valor])
+    .map(v => String(v || '').trim().toUpperCase()).filter(String);
+  const unicos = lista.filter((v, i) => lista.indexOf(v) === i);
+  if (!unicos.length) throw new ErrorApp('Agregue al menos un equipo.');
+  if (unicos.length > CONFIG.MAX_EQUIPOS_POR_SALIDA) {
+    throw new ErrorApp('Máximo ' + CONFIG.MAX_EQUIPOS_POR_SALIDA + ' equipos por salida.');
+  }
+  return unicos;
+}
+
+function porLaboratorio_(items) {
+  const grupos = {};
+  items.forEach(i => {
+    const id = i.eq.laboratorio_id;
+    (grupos[id] = grupos[id] || { lab: buscarLaboratorio_(id), items: [] }).items.push(i);
+  });
+  return Object.keys(grupos).map(k => grupos[k]);
+}
+
+function resumenEquipos_(items) {
+  return items.length === 1 ? items[0].eq.nombre : items.length + ' equipos';
 }
 
 // ─── Incidencias ────────────────────────────────────────────────────────────
@@ -574,30 +681,48 @@ function accionMisPrestamos_(d) {
 function revisarVencimientos() {
   const ahora = new Date();
   const equipos = indice_(leer_('Equipos'));
-  const porLab = {};
+  const vencidosPorPersona = {};
+  const proximosPorPersona = {};
+  const vencidosPorLab = {};
   leer_('Prestamos').filter(p => p.estado === 'activo').forEach(p => {
-    const eq = equipos[p.equipo_id] || { nombre: p.equipo_id, laboratorio_id: '' };
+    const eq = equipos[p.equipo_id] || { id: p.equipo_id, nombre: p.equipo_id, laboratorio_id: '' };
     const restante = fechaNum_(p.fecha_prevista) - ahora.getTime();
+    const item = { p: p, eq: eq };
     if (restante < 0) {
-      (porLab[eq.laboratorio_id] = porLab[eq.laboratorio_id] || []).push(p);
-      enviarCorreo_(p.email, 'Préstamo vencido: ' + eq.nombre, [
-        'El plazo de devolución venció el ' + fechaTexto_(p.fecha_prevista) + '.',
-        'Por favor devuelva el equipo y escanee su QR, o comuníquese con el laboratorio para ampliar el plazo.'
-      ], { copia: p.avalista_email });
+      (vencidosPorPersona[p.email] = vencidosPorPersona[p.email] || []).push(item);
+      (vencidosPorLab[eq.laboratorio_id] = vencidosPorLab[eq.laboratorio_id] || []).push(item);
     } else if (restante < CONFIG.HORAS_RECORDATORIO * 36e5 && !p.recordatorio_enviado) {
-      enviarCorreo_(p.email, 'Recordatorio de devolución: ' + eq.nombre, [
-        'Su préstamo vence el ' + fechaTexto_(p.fecha_prevista) + '.'
-      ]);
-      actualizar_('Prestamos', p, { recordatorio_enviado: ahora });
+      (proximosPorPersona[p.email] = proximosPorPersona[p.email] || []).push(item);
     }
   });
-  leer_('Laboratorios').forEach(lab => {
-    const vencidos = porLab[lab.id] || [];
-    if (!vencidos.length) return;
-    avisarResponsables_(lab, vencidos.length + ' préstamo(s) vencido(s) en ' + lab.nombre,
-      vencidos.map(p => '• ' + esc_((equipos[p.equipo_id] || {}).nombre || p.equipo_id) + ' — ' +
-        esc_(p.nombre) + ' (' + esc_(p.email) + '), vencía ' + fechaTexto_(p.fecha_prevista)));
+  // Un solo correo por persona, aunque tenga varios equipos.
+  Object.keys(vencidosPorPersona).forEach(email => {
+    const items = vencidosPorPersona[email];
+    const avalistas = items.map(i => i.p.avalista_email).filter(String).filter((v, i, a) => a.indexOf(v) === i);
+    enviarCorreo_(email, 'Préstamo vencido: ' + resumenEquipos_(items), [
+      'Ya pasó la fecha de devolución de ' + (items.length > 1 ? 'estos equipos' : 'este equipo') + '.',
+      lista_(items.map(i => i.eq.nombre + ' (' + i.eq.id + '), vencía ' + fechaTexto_(i.p.fecha_prevista))),
+      'Devuélvalo(s) y escanee el QR, o comuníquese con el laboratorio para ampliar el plazo.'
+    ], { copia: avalistas.join(',') });
   });
+  Object.keys(proximosPorPersona).forEach(email => {
+    const items = proximosPorPersona[email];
+    enviarCorreo_(email, 'Recordatorio de devolución: ' + resumenEquipos_(items), [
+      'Su préstamo vence pronto:',
+      lista_(items.map(i => i.eq.nombre + ' (' + i.eq.id + '): ' + fechaTexto_(i.p.fecha_prevista)))
+    ]);
+    items.forEach(i => actualizar_('Prestamos', i.p, { recordatorio_enviado: ahora }));
+  });
+  leer_('Laboratorios').forEach(lab => {
+    const items = vencidosPorLab[lab.id] || [];
+    if (!items.length) return;
+    avisarResponsables_(lab, items.length + ' préstamo(s) vencido(s) en ' + lab.nombre, [lista_(items.map(i =>
+      i.eq.nombre + ' (' + i.eq.id + ') — ' + i.p.nombre + ', ' + i.p.email + ', vencía ' + fechaTexto_(i.p.fecha_prevista)))]);
+  });
+}
+
+function lista_(lineas) {
+  return '<ul>' + lineas.map(l => '<li>' + esc_(l) + '</li>').join('') + '</ul>';
 }
 
 // ─── Instalación y menú ─────────────────────────────────────────────────────
@@ -617,6 +742,7 @@ function configurar() {
     h.setFrozenRows(1);
     h.getRange(1, 1, 1, h.getLastColumn()).setFontWeight('bold');
   });
+  cargarDatosIniciales_(libro);
   const equipos = libro.getSheetByName('Equipos');
   validarColumna_(equipos, 'nivel_control', NIVELES);
   validarColumna_(equipos, 'estado', ESTADOS_EQUIPO);
@@ -624,6 +750,64 @@ function configurar() {
   if (!props.getProperty('SECRETO_TOKEN')) {
     props.setProperty('SECRETO_TOKEN', Utilities.getUuid() + Utilities.getUuid());
   }
+}
+
+/**
+ * Llena una hoja recién creada con la cuenta del OAN como administradora, laboratorios
+ * y equipos de ejemplo, y una pestaña de instrucciones. Solo actúa sobre pestañas vacías,
+ * así que nunca toca datos reales.
+ */
+function cargarDatosIniciales_(libro) {
+  const vacia = nombre => libro.getSheetByName(nombre).getLastRow() <= 1;
+  const admin = CONFIG.CORREOS_INTERNOS[0];
+  if (vacia('Laboratorios')) {
+    [
+    ["LAB-OPT", "Laboratorio de Óptica e Instrumentación", "Edificio del OAN, primer piso"],
+    ["LAB-OBS", "Plataforma de observación", "Terraza del OAN"],
+    ["LAB-DIV", "Sala de divulgación", "Planetario del campus"]
+    ].forEach(l => agregar_('Laboratorios', { id: l[0], nombre: l[1], ubicacion: l[2], responsable_email: admin }));
+  }
+  if (vacia('Equipos')) {
+    [
+    ["OAN-TEL-0001", "Telescopio Schmidt-Cassegrain 8\"", "Telescopios", "LAB-OBS", "Celestron", "C8", "supervisado", 2, "Tubo óptico; Buscador 8×50; Diagonal 1¼\"; Tapa frontal"],
+    ["OAN-TEL-0002", "Refractor apocromático 80 mm", "Telescopios", "LAB-OBS", "Sky-Watcher", "Evostar 80ED", "libre", 3, "Tubo óptico; Anillos; Estuche"],
+    ["OAN-MON-0001", "Montura ecuatorial GoTo", "Monturas", "LAB-OBS", "Sky-Watcher", "EQ6-R", "supervisado", 2, "Cabezal; Trípode; Contrapesos (2); Mando SynScan; Cable de alimentación"],
+    ["OAN-CAM-0001", "Cámara CCD científica", "Cámaras", "LAB-OPT", "ZWO", "ASI2600MM Pro", "restringido", 2, "Cámara; Cable USB 3.0; Fuente 12 V; Rueda de filtros"],
+    ["OAN-ESP-0001", "Espectrógrafo de baja resolución", "Espectrógrafos", "LAB-OPT", "Shelyak", "Alpy 600", "restringido", 3, "Espectrógrafo; Módulo de calibración; Maletín"],
+    ["OAN-OCU-0001", "Estuche de oculares y filtros", "Oculares y filtros", "LAB-OBS", "Varias", "", "libre", 3, "Ocular 25 mm; Ocular 10 mm; Barlow 2×; Filtro lunar; Filtro solar de lámina"],
+    ["OAN-CMP-0001", "Portátil de adquisición", "Computadores", "LAB-OPT", "Lenovo", "ThinkPad", "supervisado", 5, "Portátil; Cargador"],
+    ["OAN-DIV-0001", "Kit de divulgación: sistema solar", "Divulgación", "LAB-DIV", "", "", "libre", 7, "Maqueta; Láminas (12); Guía del monitor"]
+    ].forEach(e => agregar_('Equipos', {
+      id: e[0], nombre: e[1], categoria: e[2], laboratorio_id: e[3], marca: e[4], modelo: e[5],
+      nivel_control: e[6], estado: 'disponible', max_dias: e[7], componentes: e[8],
+      notas: 'EJEMPLO: reemplazar por el inventario real'
+    }));
+  }
+  if (vacia('Usuarios') && admin) {
+    agregar_('Usuarios', { email: admin, nombre: 'Observatorio Astronómico Nacional', tipo: 'Personal técnico o administrativo',
+      dependencia: 'OAN', rol: 'admin', activo: 'SÍ', acepta_datos: new Date(), fecha_registro: new Date() });
+  }
+  let ins = libro.getSheetByName('Instrucciones');
+  if (!ins) {
+    ins = libro.insertSheet('Instrucciones', 0);
+    [
+      ['Base de datos del sistema de préstamo de equipos · Observatorio Astronómico Nacional'],
+      ['Web: ' + CONFIG.URL_WEB],
+      ['Diseño y manual: https://github.com/AstronomiaOAN/equipos'],
+      [''],
+      ['Se edita a mano:'],
+      ['• Equipos: el inventario. Los equipos marcados EJEMPLO deben reemplazarse por los reales.'],
+      ['• Laboratorios: nombre, ubicación y correos de los responsables (varios, separados por coma).'],
+      ['• Usuarios: «rol» = admin para acceso total; «activo» = NO para bloquear a alguien.'],
+      [''],
+      ['Lo llena el sistema (no editar salvo correcciones): Prestamos, Incidencias, Bitacora.'],
+      ['Esta hoja contiene datos personales (Ley 1581 de 2012): compártala solo con los responsables de laboratorio.']
+    ].forEach((fila, i) => ins.getRange(i + 1, 1).setValue(fila[0]));
+    ins.getRange(1, 1).setFontWeight('bold').setFontSize(13);
+    ins.setColumnWidth(1, 900);
+  }
+  const sobrante = libro.getSheetByName('Hoja 1') || libro.getSheetByName('Sheet1') || libro.getSheetByName('Hoja1');
+  if (sobrante && sobrante.getLastRow() === 0 && libro.getSheets().length > 1) libro.deleteSheet(sobrante);
 }
 
 function instalarAlertaDiaria() {
@@ -644,9 +828,14 @@ function onOpen() {
     .addItem('Configurar hojas', 'configurar')
     .addItem('Instalar alerta diaria (7 a. m.)', 'instalarAlertaDiaria')
     .addItem('Revisar vencimientos ahora', 'revisarVencimientos')
+    .addItem('Ver correos disponibles hoy', 'mostrarCuotaCorreo')
     .addSeparator()
     .addItem('Cerrar todas las sesiones', 'cerrarTodasLasSesiones')
     .addToUi();
+}
+
+function mostrarCuotaCorreo() {
+  SpreadsheetApp.getUi().alert('Correos que todavía se pueden enviar hoy: ' + MailApp.getRemainingDailyQuota());
 }
 
 function validarColumna_(hoja, columna, valores) {
@@ -775,7 +964,7 @@ function equipoPublico_(eq, lab) {
 
 function prestamoPublico_(p, eq) {
   return {
-    id: p.id, equipo_id: p.equipo_id, equipo_nombre: eq ? eq.nombre : p.equipo_id,
+    id: p.id, lote_id: p.lote_id || p.id, equipo_id: p.equipo_id, equipo_nombre: eq ? eq.nombre : p.equipo_id,
     nombre: p.nombre, email: p.email, proposito: p.proposito, descripcion: p.descripcion,
     curso_proyecto: p.curso_proyecto, lugar_uso: p.lugar_uso, avalista_email: p.avalista_email,
     fecha_solicitud: iso_(p.fecha_solicitud), fecha_salida: iso_(p.fecha_salida),
@@ -785,17 +974,22 @@ function prestamoPublico_(p, eq) {
   };
 }
 
-function detallePrestamo_(p, eq) {
-  return [
-    '<table cellpadding="4" style="border-collapse:collapse">' +
-    [['Equipo', eq.nombre + ' (' + eq.id + ')'], ['Responsable', p.nombre + ' · ' + p.email],
-      ['Propósito', p.proposito], ['Descripción', p.descripcion], ['Curso / proyecto', p.curso_proyecto],
-      ['Lugar de uso', p.lugar_uso], ['Salida', fechaTexto_(p.fecha_salida) || 'pendiente'],
-      ['Devolución prevista', fechaTexto_(p.fecha_prevista)], ['Préstamo', p.id]]
-      .filter(f => f[1])
-      .map(f => '<tr><td style="color:#666">' + f[0] + '</td><td>' + esc_(f[1]) + '</td></tr>').join('') +
-    '</table>'
-  ];
+/** Tabla HTML para correos: datos comunes de la actividad y la lista de equipos. */
+function detalleSalida_(items, devolucion) {
+  const p = items[0].p;
+  const fila = (k, v) => v ? '<tr><td style="color:#666;padding:3px 12px 3px 0">' + k + '</td><td>' + esc_(v) + '</td></tr>' : '';
+  const datos = '<table style="border-collapse:collapse;margin-bottom:12px">' +
+    fila('Responsable', p.nombre + ' · ' + p.email) + fila('Propósito', p.proposito) +
+    fila('Actividad', p.descripcion) + fila('Curso / proyecto', p.curso_proyecto) + fila('Lugar de uso', p.lugar_uso) +
+    fila('Devolución prevista', fechaTexto_(p.fecha_prevista)) + fila('Salida', p.lote_id) + '</table>';
+  const celda = 'style="border-bottom:1px solid #ddd;padding:4px 10px 4px 0;text-align:left"';
+  const equipos = '<table style="border-collapse:collapse"><tr><th ' + celda + '>Equipo</th><th ' + celda + '>Código</th><th ' +
+    celda + '>' + (devolucion ? 'Estado entregado' : 'Situación') + '</th></tr>' +
+    items.map(i => '<tr><td ' + celda + '>' + esc_(i.eq.nombre) + '</td><td ' + celda + '>' + esc_(i.eq.id) + '</td><td ' + celda + '>' +
+      esc_(devolucion ? i.p.condicion_devolucion + (i.p.obs_devolucion ? ' — ' + i.p.obs_devolucion : '')
+        : (i.p.estado === 'pendiente' ? 'pendiente de aprobación' : 'salió ' + fechaTexto_(i.p.fecha_salida))) +
+      '</td></tr>').join('') + '</table>';
+  return datos + equipos;
 }
 
 // ─── Correo ─────────────────────────────────────────────────────────────────
@@ -811,7 +1005,9 @@ function enviarCorreo_(para, asunto, lineas, opciones) {
       cc: opciones.copia || '',
       subject: '[OAN] ' + asunto,
       name: CONFIG.NOMBRE_SISTEMA,
-      htmlBody: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">' + cuerpo +
+      htmlBody: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">' +
+        '<img src="' + CONFIG.URL_WEB + 'img/logo-claro.png" alt="Observatorio Astronómico Nacional" height="72" style="display:block;margin-bottom:16px">' +
+        cuerpo +
         '<hr><p style="color:#888;font-size:12px">' + CONFIG.NOMBRE_SISTEMA + ' · ' +
         '<a href="' + CONFIG.URL_WEB + '">' + CONFIG.URL_WEB + '</a></p></div>'
     });
@@ -842,6 +1038,7 @@ function normalizarEmail_(v, silencioso) {
 }
 
 function esInterno_(email) {
+  if (CONFIG.CORREOS_INTERNOS.indexOf(String(email).toLowerCase()) >= 0) return true;
   const dominio = String(email).split('@')[1] || '';
   return CONFIG.DOMINIOS_INTERNOS.some(d => dominio === d || dominio.endsWith('.' + d));
 }

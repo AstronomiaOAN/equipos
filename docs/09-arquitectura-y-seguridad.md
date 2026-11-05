@@ -11,7 +11,7 @@ flowchart TB
         Q[Cámara lee el QR] --> W[Web estática<br/>HTML, CSS y JavaScript]
         B[Bandeja de correo]
     end
-    subgraph Google["Cuenta institucional del OAN (privado)"]
+    subgraph Google["Cuenta oan.unal@gmail.com (privado)"]
         T[Activador diario<br/>7 a. m.] --> A[Apps Script<br/>reglas y validaciones]
         A --> H[(Hoja de Google<br/>Equipos, Prestamos, …)]
         A --> M[Gmail]
@@ -24,8 +24,8 @@ flowchart TB
 | Componente | Dónde vive | Qué hace |
 | --- | --- | --- |
 | Web ([`web/`](../web)) | GitHub Pages (gratis) | Muestra la ficha del equipo y los formularios. No guarda datos salvo la sesión del propio usuario en su navegador |
-| Backend ([`apps-script/Code.gs`](../apps-script/Code.gs)) | Google Apps Script, en la cuenta del OAN | Recibe las acciones, valida reglas, escribe en la hoja y envía correos |
-| Base de datos | Hoja de Google en el Drive del OAN | Seis pestañas; ver [modelo de datos](05-modelo-de-datos.md) |
+| Backend ([`apps-script/Code.gs`](../apps-script/Code.gs)) | Google Apps Script, en la cuenta oan.unal@gmail.com | Recibe las acciones, valida reglas, escribe en la hoja y envía correos |
+| Base de datos | Hoja de Google en el Drive de oan.unal@gmail.com, carpeta *Sistema de préstamo de equipos OAN* | Seis pestañas; ver [modelo de datos](05-modelo-de-datos.md) |
 | Etiquetas ([`herramientas/`](../herramientas)) | Computador de quien imprime | Genera el PDF con los QR |
 
 La web y el backend se comunican con peticiones `POST` cuyo cuerpo es JSON enviado como `text/plain`, porque Apps Script no responde a las consultas previas (CORS *preflight*) que hace el navegador con `application/json`.
@@ -63,3 +63,4 @@ La web y el backend se comunican con peticiones `POST` cuyo cuerpo es JSON envia
 - Apps Script tarda entre 1 y 3 segundos por petición; es aceptable para formularios.
 - Una hoja de Google funciona bien hasta decenas de miles de filas. Con el ritmo previsible del OAN eso son varios años; antes de llegar ahí, conviene pasar a la fase 3.
 - La web necesita conexión a internet.
+- Una cuenta @gmail.com envía unos 100 correos al día (ver [notificaciones](07-reglas-y-notificaciones.md)). Si el uso crece, conviene mover el sistema a una cuenta institucional de Google Workspace, que permite unos 1.500.

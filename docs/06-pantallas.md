@@ -8,14 +8,15 @@ La web está pensada para el celular, que es lo que la gente tiene en la mano cu
 
 Lo más grande es el código del equipo, para que la persona confirme de un vistazo que abrió el equipo que tiene en la mano. Debajo, el estado con un indicador de color, el laboratorio, las condiciones de préstamo y lo que incluye. Hay **un solo botón principal**, que cambia según el estado: «Prestar este equipo», «Devolver este equipo» o, para el responsable, «Aprobar y entregar» o «Revisado: queda disponible».
 
-## Formulario de préstamo
+## Formulario de préstamo (uno o varios equipos)
 
-<img src="img/formulario-prestamo.png" width="300" alt="Formulario de préstamo con datos personales, uso del equipo, fecha de devolución y estado al recibirlo">
+<img src="img/salida-varios-equipos.png" width="300" alt="Formulario de préstamo con tres equipos en la lista, botón para escanear otro QR y datos de la actividad">
 
+- **Equipos**: la lista de lo que sale, con «Quitar» en cada uno, el botón **Escanear otro QR** (abre la cámara dentro de la página y lee varios QR seguidos) y un campo para escribir un código.
 - **Sus datos** solo aparece la primera vez: nombre, vinculación, dependencia, celular (opcional) y la autorización de tratamiento de datos.
-- **Uso del equipo**: propósito (lista), descripción de la actividad, curso o proyecto, lugar de uso y fecha y hora de devolución (limitada al plazo máximo del equipo).
-- **Estado al recibirlo** y la casilla de compromiso.
-- Si el préstamo requiere aprobación, el botón cambia a «Enviar solicitud» y se explica por qué.
+- **Actividad**, una sola vez para todos los equipos: propósito, descripción, curso o proyecto, lugar de uso y fecha de devolución (limitada al plazo del equipo más restrictivo).
+- **Estado al recibirlos** y la casilla de compromiso.
+- Si algún equipo requiere aprobación, se explica cuáles; el botón dice cuántos equipos se registran.
 
 ## Comprobante
 
@@ -25,15 +26,25 @@ Muestra la fecha y hora registradas y el número de préstamo. La misma informac
 
 ## Mis préstamos
 
-<img src="img/mis-prestamos.png" width="300" alt="Lista de préstamos del usuario con su estado">
+<img src="img/mis-prestamos.png" width="300" alt="Préstamos del usuario agrupados por salida, con botón para devolver todos">
 
-Lo que la persona tiene ahora y su historial, con los vencidos resaltados.
+Lo que la persona tiene ahora, **agrupado por salida**, con el botón «Devolver N equipos», y su historial.
+
+## Devolución de varios equipos
+
+<img src="img/devolucion-varios.png" width="300" alt="Formulario de devolución con un bloque por equipo, su estado y observaciones">
+
+Un bloque por equipo con lo que incluye, el estado en que se entrega y observaciones (obligatorias si está dañado o incompleto). Se desmarcan los equipos que todavía no se devuelven.
 
 ## Panel del laboratorio
 
 <img src="img/panel-laboratorio.png" width="300" alt="Panel del responsable con solicitudes por aprobar, devoluciones por verificar y resumen de uso">
 
-Solo para responsables y administradores. En orden de urgencia: solicitudes por aprobar, devoluciones por verificar, préstamos vencidos, equipos prestados, reportes de daño abiertos y un resumen de los últimos 30 días (préstamos por propósito y equipos más usados). Todas las acciones se hacen desde aquí sin abrir la hoja de cálculo.
+Solo para responsables y administradores. Las solicitudes y devoluciones de una misma salida aparecen juntas y se atienden con un botón. En orden de urgencia: solicitudes por aprobar, devoluciones por verificar, préstamos vencidos, equipos prestados, reportes de daño abiertos y un resumen de los últimos 30 días (préstamos por propósito y equipos más usados). Todas las acciones se hacen desde aquí sin abrir la hoja de cálculo.
+
+## Logo
+
+La cabecera, los correos y las etiquetas llevan el logo del Observatorio. Sobre fondo claro se usa la versión con letras azules ([`web/img/logo-claro.png`](../web/img/logo-claro.png)); sobre fondo oscuro, la de letras blancas ([`web/img/logo-oscuro.png`](../web/img/logo-oscuro.png)), que en el modo de luz roja se tiñe de rojo tenue.
 
 ## Modo de luz roja
 

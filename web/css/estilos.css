@@ -7,10 +7,10 @@
 :root {
   --papel: #f3f6f9;
   --superficie: #ffffff;
-  --tinta: #14263a;
-  --tinta-2: #4b5e71;
-  --linea: #c9d3dd;
-  --acento: #1d3557;
+  --tinta: #1c2640;
+  --tinta-2: #4f5a75;
+  --linea: #cdd3df;
+  --acento: #2c3a5d;
   --acento-texto: #ffffff;
   --foco: #2f6fb0;
   --ok: #1f6f45;
@@ -91,15 +91,28 @@ h1:focus, h2:focus { outline: none; }
 .marca {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
   text-decoration: none;
-  font-weight: 700;
-  font-size: 0.95rem;
-  line-height: 1.2;
   margin-right: auto;
 }
-.marca small { display: block; font-weight: 400; color: var(--tinta-2); font-size: 0.85rem; }
-.marca-icono { width: 1.9rem; height: 1.9rem; flex: none; }
+.logo { height: 4.5rem; width: auto; display: block; }
+.logo-oscuro { display: none; }
+.marca-texto {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.15;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--linea);
+  color: var(--tinta-2);
+}
+
+/* Fondo oscuro: logo con letras blancas. En luz roja se tiñe de rojo tenue
+   para no romper la adaptación del ojo a la oscuridad. */
+:root[data-nocturno='si'] .logo-claro { display: none; }
+:root[data-nocturno='si'] .logo-oscuro {
+  display: block;
+  filter: grayscale(1) sepia(1) saturate(8) hue-rotate(-45deg) brightness(0.75);
+}
 
 .cuenta { display: flex; gap: 1rem; font-size: 0.95rem; }
 
@@ -241,6 +254,7 @@ input:focus, select, textarea:focus { border-color: var(--tinta-2); }
 .buscar { margin: 1.5rem 0 0; }
 .fila-buscar { display: flex; gap: 0.5rem; }
 .fila-buscar input { text-transform: uppercase; font-size: 1.2rem; letter-spacing: 0.04em; }
+.fila-buscar input::placeholder { text-transform: none; letter-spacing: 0; }
 .fila-buscar button { flex: none; }
 
 .error {
@@ -363,3 +377,93 @@ button:disabled { opacity: 0.6; cursor: progress; }
 @media print {
   .cabecera, .acciones, .banda-demo, .pie-equipo { display: none; }
 }
+
+/* ─── Salida con varios equipos ────────────────────────────────────────── */
+
+.enlace-salida { font-weight: 700; }
+.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ancho { width: 100%; margin-top: 0.75rem; }
+
+.lista-salida { list-style: none; margin: 0.5rem 0 0; padding: 0; border-top: 1px solid var(--linea); }
+.lista-salida li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--linea);
+}
+.quitar {
+  min-height: 2.5rem;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.9rem;
+  background: transparent;
+  color: var(--tinta-2);
+  border-color: var(--linea);
+  box-shadow: none;
+  flex: none;
+}
+.agregar-equipo { margin-top: 1rem; display: grid; gap: 0.75rem; }
+.agregar-equipo > .secundario { width: 100%; }
+.agregar-equipo .fila-buscar input { font-size: 1rem; text-transform: uppercase; }
+.agregar-equipo .ayuda:empty { display: none; }
+
+.salida {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 0.9rem 1rem 1rem;
+  margin: 0 0 1rem;
+  background: var(--superficie);
+}
+.salida-titulo { margin: 0 0 0.6rem; }
+.salida .prestamos { border-top: 1px solid var(--linea); }
+.salida .prestamos li:last-child { border-bottom: 0; }
+
+.item-devolucion {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 0.6rem 1rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--superficie);
+}
+.item-devolucion legend { padding: 0 0.35rem; margin-left: -0.35rem; }
+.item-devolucion.excluido { opacity: 0.5; }
+.item-devolucion.excluido select, .item-devolucion.excluido textarea, .item-devolucion.excluido > label { display: none; }
+.casilla-titulo { display: inline-flex; gap: 0.6rem; align-items: center; margin: 0; cursor: pointer; }
+.casilla-titulo input { width: 1.3rem; height: 1.3rem; accent-color: var(--acento); }
+.codigo-linea { font-size: 0.92rem; margin: 0.1rem 0 0; }
+
+/* ─── Lector de QR ─────────────────────────────────────────────────────── */
+
+.sin-scroll { overflow: hidden; }
+.escaner {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+.escaner video { flex: 1; width: 100%; min-height: 0; object-fit: cover; }
+.escaner-marco {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  width: min(65vw, 18rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 3px solid rgb(255 255 255 / 0.9);
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+.escaner-pie {
+  background: var(--papel);
+  color: var(--tinta);
+  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  max-height: 45vh;
+  overflow: auto;
+}
+.escaner-estado { font-weight: 700; margin-bottom: 0.5rem; }
+.escaner-lista { margin: 0 0 1rem; padding-left: 1.2rem; font-size: 0.95rem; }
+:root[data-nocturno='si'] .escaner-marco { border-color: var(--tinta); }

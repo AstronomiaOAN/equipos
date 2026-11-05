@@ -31,6 +31,33 @@ flowchart TD
     C -- En préstamo, de otra persona --> S([Muestra hasta cuándo está prestado<br/>sin datos personales])
 ```
 
+## Varios equipos para una misma actividad (salida)
+
+Para una práctica o una noche de observación normalmente salen varios equipos juntos. La persona arma una **salida**: una lista de equipos con los datos de la actividad escritos una sola vez.
+
+```mermaid
+flowchart TD
+    A([Escanea el QR del primer equipo]) --> B[Prestar este equipo]
+    B --> C[Formulario de la salida<br/>lista de equipos + datos de la actividad]
+    C --> D{¿Falta algún equipo?}
+    D -- Sí --> E[Escanear otro QR con la cámara<br/>dentro de la página, o escribir el código]
+    E --> F{¿Está disponible?}
+    F -- Sí --> G[Se agrega a la lista]
+    F -- No --> H[Aviso: no se agrega]
+    G --> D
+    H --> D
+    D -- No --> I[Registrar préstamo de N equipos]
+    I --> J[Un registro por equipo<br/>con el mismo número de salida]
+    J --> K([Un solo comprobante y un solo correo])
+```
+
+- El lector de QR dentro de la página **escanea seguido**: se apunta a un equipo, vibra al leerlo, y se apunta al siguiente sin tocar nada. También se puede escanear con la cámara normal del celular; la página recuerda la salida en preparación y ofrece «Agregar a mi salida».
+- Lo escrito en el formulario se conserva mientras se agregan equipos.
+- **Plazo:** la fecha de devolución no puede superar el plazo del equipo más restrictivo de la lista.
+- **Aprobación por equipo:** solo los equipos que la requieren quedan pendientes; los demás salen de inmediato. El responsable aprueba la salida con un solo botón.
+- **Devolución:** desde «Mis préstamos» o desde el QR de cualquiera de los equipos se puede devolver **toda la salida** en un formulario (estado de cada equipo) o **solo algunos** equipos; los demás siguen prestados.
+- Cada equipo conserva su propio registro, así que el historial y las estadísticas por equipo siguen siendo exactos.
+
 ## Estados de un préstamo
 
 ```mermaid

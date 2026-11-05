@@ -2,11 +2,11 @@
 
 Sistema para registrar el préstamo y la devolución de los equipos de los laboratorios del Observatorio Astronómico Nacional (OAN) de la Universidad Nacional de Colombia.
 
-Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea con el celular, dice para qué lo va a usar y cuándo lo devuelve, y el sistema guarda la **fecha y hora de salida**. Al devolverlo escanea el mismo QR, indica en qué estado lo entrega y se guarda la **fecha y hora de devolución**. Los responsables de cada laboratorio ven en un panel qué está prestado, a quién y para qué, y reciben avisos de vencimientos y daños.
+Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea con el celular, dice para qué lo va a usar y cuándo lo devuelve, y el sistema guarda la **fecha y hora de salida**. Si una actividad necesita **varios equipos**, se escanean uno tras otro en el mismo formulario y los datos de la actividad se escriben una sola vez. Al devolverlo escanea el mismo QR, indica en qué estado lo entrega y se guarda la **fecha y hora de devolución**. Los responsables de cada laboratorio ven en un panel qué está prestado, a quién y para qué, y reciben avisos de vencimientos y daños.
 
 <p>
   <img src="docs/img/equipo.png" width="230" alt="Ficha de un equipo al escanear su QR">
-  <img src="docs/img/formulario-prestamo.png" width="230" alt="Formulario de préstamo">
+  <img src="docs/img/salida-varios-equipos.png" width="230" alt="Formulario de préstamo de varios equipos">
   <img src="docs/img/panel-laboratorio.png" width="230" alt="Panel del responsable del laboratorio">
 </p>
 
@@ -17,13 +17,13 @@ Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea c
 ```mermaid
 flowchart LR
     QR[Etiqueta QR<br/>en el equipo] --> Web[Web en GitHub Pages]
-    Web -- préstamo, devolución,<br/>aprobación, daños --> AS[Google Apps Script<br/>cuenta del OAN]
-    AS --> Hoja[(Hoja de Google<br/>base de datos)]
+    Web -- préstamo, devolución,<br/>aprobación, daños --> AS[Google Apps Script<br/>oan.unal@gmail.com]
+    AS --> Hoja[(Hoja de Google en Drive<br/>base de datos)]
     AS --> Correo[Avisos por correo]
 ```
 
 - **Código, diseño y página web** viven en este repositorio y se publican gratis con GitHub Pages.
-- **Los datos** (con nombres y correos) viven en una hoja de Google privada de la cuenta institucional, no en GitHub. Ver por qué en [opciones de implementación](docs/02-opciones-de-implementacion.md#por-qué-no-guardar-los-datos-en-github).
+- **Los datos** (con nombres y correos) viven en una hoja de Google privada en el Drive de **oan.unal@gmail.com**, no en GitHub. Ver por qué en [opciones de implementación](docs/02-opciones-de-implementacion.md#por-qué-no-guardar-los-datos-en-github).
 
 ## Diseño del sistema
 
@@ -60,7 +60,7 @@ flowchart LR
 ## Puesta en marcha
 
 1. **Probar la demostración:** active GitHub Pages (Settings → Pages → Source: **GitHub Actions**) y abra la web. Todo funciona con equipos de ejemplo guardados en el navegador.
-2. **Instalar el backend** en la cuenta del OAN: [apps-script/README.md](apps-script/README.md).
+2. **Activar la base de datos** que ya está creada en el Drive de oan.unal@gmail.com: [apps-script/README.md](apps-script/README.md).
 3. **Conectar la web:** pegar la URL del backend en [`web/js/config.js`](web/js/config.js).
 4. **Cargar el inventario** en la hoja `Equipos` e **imprimir las etiquetas**:
 

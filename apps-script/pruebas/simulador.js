@@ -33,10 +33,12 @@ function crearHoja(nombre) {
         while (filas.length < fila) filas.push([]);
         filas[fila - 1][col - 1] = v;
       },
-      setFontWeight: () => {},
+      setFontWeight() { return this; },
+      setFontSize() { return this; },
       setDataValidation: () => {}
     }),
-    setFrozenRows: () => {}
+    setFrozenRows: () => {},
+    setColumnWidth: () => {}
   };
   return hoja;
 }
@@ -48,7 +50,9 @@ function crearEntorno() {
   const cache = {};
   const libro = {
     getSheetByName: n => hojas[n] || null,
-    insertSheet: n => (hojas[n] = crearHoja(n))
+    insertSheet: n => (hojas[n] = crearHoja(n)),
+    getSheets: () => Object.values(hojas),
+    deleteSheet: h => { delete hojas[h.nombre]; }
   };
   const b64 = buf => Buffer.from(buf).toString('base64');
   const b64ws = buf => b64(buf).replace(/\+/g, '-').replace(/\//g, '_');

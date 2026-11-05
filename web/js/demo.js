@@ -2,7 +2,7 @@
 // Sirve para probar la web y capacitar al personal antes de conectar la hoja de cálculo.
 import { CATALOGOS, EQUIPOS_DEMO, LABORATORIOS_DEMO } from './catalogos.js';
 
-const CLAVE = 'oan-equipos-demo-v1';
+const CLAVE = 'oan-equipos-demo-v2';
 const ABIERTOS = ['pendiente', 'activo', 'por_verificar'];
 
 class ErrorDemo extends Error {
@@ -37,7 +37,7 @@ export function reiniciarDemo() {
   try { localStorage.removeItem(CLAVE); } catch (e) { /* nada */ }
 }
 
-const interno = email => /@(.+\.)?unal\.edu\.co$/.test(email);
+const interno = email => email === 'oan.unal@gmail.com' || /@(.+\.)?unal\.edu\.co$/.test(email);
 const normal = v => String(v || '').trim().toLowerCase();
 const texto = (v, max = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const nuevoId = p => `${p}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -75,6 +75,28 @@ function equipo(db, id) {
 const abierto = (db, id) => db.prestamos.find(p => p.equipo_id === id && ABIERTOS.includes(p.estado)) || null;
 const laboratorio = (db, id) => db.laboratorios.find(l => l.id === id) || { id, nombre: id, ubicacion: '' };
 const esGestor = (db, s, eq) => gestiona(db, s.email, s.usuario).includes(eq.laboratorio_id);
+
+function ids(valor) {
+  const lista = [...new Set((Array.isArray(valor) ? valor : [valor]).map(v => normal(v).toUpperCase()).filter(Boolean))];
+  if (!lista.length) throw new ErrorDemo('Agregue al menos un equipo.');
+  if (lista.length > 30) throw new ErrorDemo('Máximo 30 equipos por salida.');
+  return lista;
+}
+
+function objetivo(db, d) {
+  if (d.lote_id) return db.prestamos.filter(p => (p.lote_id || p.id) === d.lote_id);
+  const p = db.prestamos.find(x => x.id === d.prestamo_id);
+  if (!p) throw new ErrorDemo('No existe el préstamo.', 404);
+  return [p];
+}
+
+function atendibles(db, s, lista, estado, siNoHay) {
+  const enEstado = lista.filter(p => p.estado === estado);
+  if (!enEstado.length) throw new ErrorDemo(siNoHay, 409);
+  const propios = enEstado.filter(p => esGestor(db, s, equipo(db, p.equipo_id)));
+  if (!propios.length) throw new ErrorDemo('Solo el responsable del laboratorio puede hacer esta acción.', 403);
+  return propios;
+}
 
 function pub(db, p) {
   const eq = db.equipos.find(e => e.id === p.equipo_id);
@@ -130,6 +152,7 @@ const ACCIONES = {
       const mio = !!s && p.email === s.email;
       prestamo = { estado: p.estado, fecha_prevista: p.fecha_prevista, vencido: vencido(p), es_mio: mio };
       if (mio || gestor) Object.assign(prestamo, pub(db, p));
+      if (mio) prestamo.activos_en_salida = db.prestamos.filter(x => x.lote_id === p.lote_id && x.email === s.email && x.estado === 'activo').length;
     }
     const lab = laboratorio(db, eq.laboratorio_id);
     return {
@@ -138,99 +161,131 @@ const ACCIONES = {
     };
   },
 
+  equipos(db, d) {
+    return {
+      equipos: ids(d.ids).map(id => {
+        try {
+          const eq = equipo(db, id);
+          const lab = laboratorio(db, eq.laboratorio_id);
+          return { ...eq, laboratorio: lab.nombre, ubicacion: lab.ubicacion };
+        } catch (e) { return { id, error: e.message }; }
+      })
+    };
+  },
+
   prestar(db, d) {
     const s = sesion(db, d.token);
     let usuario = s.usuario;
     if (d.perfil) usuario = guardarPerfil(db, s.email, d.perfil);
     if (!usuario) throw new ErrorDemo('Complete su perfil antes de solicitar un préstamo.');
-    const eq = equipo(db, d.equipo_id);
-    if (eq.estado !== 'disponible') throw new ErrorDemo('El equipo no está disponible.', 409);
+    const eqs = ids(d.equipos || d.equipo_id).map(id => equipo(db, id));
+    const ocupados = eqs.filter(e => e.estado !== 'disponible');
+    if (ocupados.length) throw new ErrorDemo(`No están disponibles: ${ocupados.map(e => `${e.id} (${e.estado.replace('_', ' ')})`).join(', ')}. Quítelos de la lista.`, 409);
     const proposito = enLista(d.proposito, CATALOGOS.propositos, 'el propósito');
     const lugar = enLista(d.lugar_uso, CATALOGOS.lugares, 'el lugar de uso');
     const descripcion = texto(d.descripcion, 500);
-    if (descripcion.length < 5) throw new ErrorDemo('Describa brevemente para qué usará el equipo.');
+    if (descripcion.length < 5) throw new ErrorDemo('Describa brevemente para qué usará los equipos.');
     const ahora = new Date();
     const prevista = new Date(d.fecha_prevista);
+    const maxDias = Math.min(...eqs.map(e => e.max_dias || 7));
     if (isNaN(prevista) || prevista <= ahora) throw new ErrorDemo('Indique una fecha y hora de devolución posterior al momento actual.');
-    if (prevista - ahora > eq.max_dias * 864e5 + 36e5) throw new ErrorDemo(`Este equipo se presta máximo ${eq.max_dias} día(s).`);
+    if (prevista - ahora > maxDias * 864e5 + 36e5) throw new ErrorDemo(eqs.length > 1 ? `Con estos equipos el plazo máximo es de ${maxDias} día(s).` : `Este equipo se presta máximo ${maxDias} día(s).`);
     const externo = usuario.tipo === 'Externo';
     const avalista = externo ? normal(d.avalista_email) : '';
     if (externo && !interno(avalista)) throw new ErrorDemo('Los usuarios externos necesitan un avalista con correo institucional.');
-    const requiere = eq.nivel_control === 'restringido' || externo || lugar === 'Fuera del campus';
-    const p = {
-      id: nuevoId('P'), equipo_id: eq.id, email: s.email, nombre: usuario.nombre, tipo_usuario: usuario.tipo,
-      proposito, descripcion, curso_proyecto: texto(d.curso_proyecto, 150), lugar_uso: lugar, avalista_email: avalista,
-      fecha_solicitud: ahora.toISOString(), fecha_salida: requiere ? '' : ahora.toISOString(),
-      fecha_prevista: prevista.toISOString(), fecha_devolucion: '', estado: requiere ? 'pendiente' : 'activo',
-      condicion_salida: texto(d.condicion_salida, 300) || 'Bueno'
-    };
-    db.prestamos.push(p);
-    eq.estado = requiere ? 'reservado' : 'prestado';
-    return { prestamo: pub(db, p), requiere_aprobacion: requiere };
+    const general = externo || lugar === 'Fuera del campus';
+    const lote = nuevoId('L');
+    const creados = eqs.map(eq => {
+      const requiere = general || eq.nivel_control === 'restringido';
+      const p = {
+        id: nuevoId('P'), lote_id: lote, equipo_id: eq.id, email: s.email, nombre: usuario.nombre, tipo_usuario: usuario.tipo,
+        proposito, descripcion, curso_proyecto: texto(d.curso_proyecto, 150), lugar_uso: lugar, avalista_email: avalista,
+        fecha_solicitud: ahora.toISOString(), fecha_salida: requiere ? '' : ahora.toISOString(),
+        fecha_prevista: prevista.toISOString(), fecha_devolucion: '', estado: requiere ? 'pendiente' : 'activo',
+        condicion_salida: texto(d.condicion_salida, 300) || 'Bueno'
+      };
+      db.prestamos.push(p);
+      eq.estado = requiere ? 'reservado' : 'prestado';
+      return p;
+    });
+    const pub_ = creados.map(p => pub(db, p));
+    return { lote_id: lote, prestamos: pub_, prestamo: pub_[0], requiere_aprobacion: creados.some(p => p.estado === 'pendiente') };
   },
 
   cancelar(db, d) {
     const s = sesion(db, d.token);
-    const p = db.prestamos.find(x => x.id === d.prestamo_id);
-    if (!p || p.email !== s.email) throw new ErrorDemo('Solo puede cancelar sus propias solicitudes.', 403);
-    if (p.estado !== 'pendiente') throw new ErrorDemo('Solo se pueden cancelar solicitudes pendientes.', 409);
-    p.estado = 'cancelado';
-    const eq = equipo(db, p.equipo_id);
-    if (eq.estado === 'reservado') eq.estado = 'disponible';
-    return { prestamo: pub(db, p) };
+    const lista = objetivo(db, d).filter(p => p.estado === 'pendiente' && p.email === s.email);
+    if (!lista.length) throw new ErrorDemo('No hay solicitudes pendientes suyas para cancelar.', 409);
+    lista.forEach(p => {
+      p.estado = 'cancelado';
+      const eq = equipo(db, p.equipo_id);
+      if (eq.estado === 'reservado') eq.estado = 'disponible';
+    });
+    return { cancelados: lista.length };
   },
 
   aprobar(db, d) {
     const s = sesion(db, d.token);
-    const p = db.prestamos.find(x => x.id === d.prestamo_id);
-    if (!p) throw new ErrorDemo('No existe el préstamo.', 404);
-    const eq = equipo(db, p.equipo_id);
-    if (!esGestor(db, s, eq)) throw new ErrorDemo('Solo el responsable del laboratorio puede hacer esta acción.', 403);
-    if (p.estado !== 'pendiente') throw new ErrorDemo('La solicitud ya fue atendida.', 409);
-    if (d.aprobar) {
-      Object.assign(p, { estado: 'activo', fecha_salida: new Date().toISOString(), aprobado_por: s.email });
-      eq.estado = 'prestado';
-    } else {
-      const motivo = texto(d.motivo, 300);
-      if (motivo.length < 3) throw new ErrorDemo('Indique el motivo del rechazo.');
-      Object.assign(p, { estado: 'rechazado', aprobado_por: s.email, motivo_rechazo: motivo });
-      eq.estado = 'disponible';
-    }
-    return { prestamo: pub(db, p) };
+    const lista = atendibles(db, s, objetivo(db, d), 'pendiente', 'No hay solicitudes pendientes para atender.');
+    const motivo = texto(d.motivo, 300);
+    if (!d.aprobar && motivo.length < 3) throw new ErrorDemo('Indique el motivo del rechazo.');
+    lista.forEach(p => {
+      const eq = equipo(db, p.equipo_id);
+      if (d.aprobar) {
+        Object.assign(p, { estado: 'activo', fecha_salida: new Date().toISOString(), aprobado_por: s.email });
+        eq.estado = 'prestado';
+      } else {
+        Object.assign(p, { estado: 'rechazado', aprobado_por: s.email, motivo_rechazo: motivo });
+        eq.estado = 'disponible';
+      }
+    });
+    const r = lista.map(p => pub(db, p));
+    return { prestamos: r, prestamo: r[0] };
   },
 
   devolver(db, d) {
     const s = sesion(db, d.token);
-    const eq = equipo(db, d.equipo_id);
-    const p = abierto(db, eq.id);
-    if (!p || p.estado !== 'activo') throw new ErrorDemo('Este equipo no tiene un préstamo activo.', 409);
-    const gestor = esGestor(db, s, eq);
-    if (p.email !== s.email && !gestor) throw new ErrorDemo('Solo quien tiene el préstamo o un responsable del laboratorio puede registrar la devolución.', 403);
-    const condicion = enLista(d.condicion, CATALOGOS.condiciones, 'el estado del equipo');
-    const componentesOk = d.componentes_ok !== false;
-    const obs = texto(d.observaciones, 500);
-    const problema = ['Dañado', 'Incompleto'].includes(condicion) || !componentesOk;
-    if (problema && obs.length < 5) throw new ErrorDemo('Describa el daño o el faltante en las observaciones.');
-    const verificar = !gestor && (eq.nivel_control !== 'libre' || problema);
-    Object.assign(p, {
-      fecha_devolucion: new Date().toISOString(), condicion_devolucion: condicion, obs_devolucion: obs,
-      componentes_ok: componentesOk, devuelto_por: s.email, estado: verificar ? 'por_verificar' : 'devuelto'
+    const pedidos = Array.isArray(d.devoluciones) ? d.devoluciones : [d];
+    if (!pedidos.length) throw new ErrorDemo('No indicó qué equipos devuelve.');
+    const vistos = new Set();
+    const items = pedidos.map(x => {
+      const eq = equipo(db, x.equipo_id);
+      if (vistos.has(eq.id)) throw new ErrorDemo(`El equipo ${eq.id} está repetido.`);
+      vistos.add(eq.id);
+      const p = abierto(db, eq.id);
+      if (!p || p.estado !== 'activo') throw new ErrorDemo(`${eq.id} no tiene un préstamo activo.`, 409);
+      const gestor = esGestor(db, s, eq);
+      if (p.email !== s.email && !gestor) throw new ErrorDemo(`Solo quien tiene el préstamo de ${eq.id} o un responsable del laboratorio puede registrar la devolución.`, 403);
+      const condicion = enLista(x.condicion, CATALOGOS.condiciones, `el estado de ${eq.id}`);
+      const componentesOk = x.componentes_ok !== false && condicion !== 'Incompleto';
+      const obs = texto(x.observaciones, 500);
+      const problema = condicion === 'Dañado' || !componentesOk;
+      if (problema && obs.length < 5) throw new ErrorDemo(`Describa el daño o el faltante de ${eq.id}.`);
+      return { eq, p, gestor, condicion, componentesOk, obs, problema };
     });
-    eq.estado = verificar ? 'en_revision' : (problema ? 'mantenimiento' : 'disponible');
-    if (problema) db.incidencias.push({ id: nuevoId('I'), equipo_id: eq.id, prestamo_id: p.id, email: s.email, tipo: condicion === 'Dañado' ? 'Daño' : 'Faltante', descripcion: obs, fecha: new Date().toISOString(), estado: 'abierta' });
-    return { prestamo: pub(db, p), estado_equipo: eq.estado, requiere_verificacion: verificar };
+    const ahora = new Date().toISOString();
+    items.forEach(i => {
+      i.verificar = !i.gestor && (i.eq.nivel_control !== 'libre' || i.problema);
+      Object.assign(i.p, {
+        fecha_devolucion: ahora, condicion_devolucion: i.condicion, obs_devolucion: i.obs, componentes_ok: i.componentesOk,
+        devuelto_por: s.email, estado: i.verificar ? 'por_verificar' : 'devuelto'
+      });
+      i.eq.estado = i.verificar ? 'en_revision' : (i.problema ? 'mantenimiento' : 'disponible');
+      if (i.problema) db.incidencias.push({ id: nuevoId('I'), equipo_id: i.eq.id, prestamo_id: i.p.id, email: s.email, tipo: i.condicion === 'Dañado' ? 'Daño' : 'Faltante', descripcion: i.obs, fecha: ahora, estado: 'abierta' });
+    });
+    const r = items.map(i => ({ ...pub(db, i.p), estado_equipo: i.eq.estado, requiere_verificacion: i.verificar }));
+    return { prestamos: r, prestamo: r[0], estado_equipo: items[0].eq.estado, requiere_verificacion: items.some(i => i.verificar) };
   },
 
   verificar(db, d) {
     const s = sesion(db, d.token);
-    const p = db.prestamos.find(x => x.id === d.prestamo_id);
-    if (!p) throw new ErrorDemo('No existe el préstamo.', 404);
-    const eq = equipo(db, p.equipo_id);
-    if (!esGestor(db, s, eq)) throw new ErrorDemo('Solo el responsable del laboratorio puede hacer esta acción.', 403);
-    if (p.estado !== 'por_verificar') throw new ErrorDemo('Esta devolución no está pendiente de verificación.', 409);
-    Object.assign(p, { estado: 'devuelto', verificado_por: s.email, fecha_verificacion: new Date().toISOString() });
-    eq.estado = d.enviar_mantenimiento ? 'mantenimiento' : 'disponible';
-    return { prestamo: pub(db, p), estado_equipo: eq.estado };
+    const lista = atendibles(db, s, objetivo(db, d), 'por_verificar', 'No hay devoluciones por verificar.');
+    lista.forEach(p => {
+      Object.assign(p, { estado: 'devuelto', verificado_por: s.email, fecha_verificacion: new Date().toISOString() });
+      equipo(db, p.equipo_id).estado = d.enviar_mantenimiento ? 'mantenimiento' : 'disponible';
+    });
+    const r = lista.map(p => pub(db, p));
+    return { prestamos: r, prestamo: r[0] };
   },
 
   reportar(db, d) {

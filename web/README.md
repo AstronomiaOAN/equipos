@@ -8,6 +8,8 @@ Página estática, sin dependencias ni paso de compilación: HTML, CSS y módulo
 | `css/estilos.css` | Estilos, incluido el modo de luz roja |
 | `js/app.js` | Pantallas y navegación |
 | `js/api.js` | Conexión con el backend |
+| `js/escaner.js` | Lector de QR dentro de la página, para agregar varios equipos seguidos |
+| `img/` | Logo del OAN (versión clara y oscura) e íconos |
 | `js/config.js` | **URL del backend** (`API_URL`) |
 | `js/demo.js` | Backend simulado para el modo demostración |
 | `js/catalogos.js` | Listas, textos de estados y equipos de ejemplo |

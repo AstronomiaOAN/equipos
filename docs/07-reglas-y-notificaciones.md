@@ -5,7 +5,8 @@
 | Regla | Dónde se cambia |
 | --- | --- |
 | Solo se presta un equipo en estado `disponible` | — |
-| La devolución prevista debe ser futura y no superar `max_dias` del equipo (7 si está vacío) | Columna `max_dias` de `Equipos` |
+| La devolución prevista debe ser futura y no superar `max_dias` del equipo (7 si está vacío). En una salida de varios equipos manda el plazo más corto | Columna `max_dias` de `Equipos` |
+| Una salida tiene máximo 30 equipos; si alguno no está disponible no se registra ninguno y se indica cuál quitar | `MAX_EQUIPOS_POR_SALIDA` |
 | Requieren aprobación: equipos `restringido`, usuarios externos y préstamos para uso fuera del campus | `APROBAR_FUERA_DEL_CAMPUS` en `Code.gs` |
 | Los usuarios externos deben indicar un avalista con correo institucional, que recibe copia de los avisos de vencimiento | `DOMINIOS_INTERNOS`, `PERMITIR_EXTERNOS` |
 | La primera vez hay que aceptar la política de tratamiento de datos | — |
@@ -20,7 +21,7 @@
 | Cuándo | A quién | Contenido |
 | --- | --- | --- |
 | Inicio de sesión | Usuario | Código de 6 dígitos, válido 10 minutos |
-| Préstamo directo | Usuario | Comprobante: equipo, propósito, salida, devolución prevista, número |
+| Préstamo directo | Usuario | Comprobante con la lista de equipos de la salida, propósito y devolución prevista (uno solo por salida) |
 | Préstamo de equipo supervisado | Responsables del laboratorio | Aviso de salida con los datos del préstamo |
 | Solicitud que requiere aprobación | Responsables (y avalista, si es externo) | Datos de la solicitud y enlace al panel |
 | Solicitud recibida | Usuario | Confirmación de que quedó pendiente |
@@ -32,7 +33,7 @@
 | Préstamo vencido (cada día a las 7 a. m.) | Usuario y avalista | Aviso de vencimiento |
 | Préstamos vencidos (cada día a las 7 a. m.) | Responsables | Resumen por laboratorio |
 
-Los correos salen de la cuenta institucional que instala el Apps Script. Google limita el envío diario (alrededor de 1.500 correos para cuentas de Google Workspace), muy por encima de lo que necesita el OAN. Si falla un correo, el préstamo igual queda registrado.
+Los correos salen de **oan.unal@gmail.com**, la cuenta dueña del Apps Script. Una cuenta @gmail.com puede enviar **unos 100 correos al día**. Para no agotarlos, el sistema manda **un solo correo por salida** (no uno por equipo) y agrupa los avisos de vencimiento por persona. El menú *Préstamos OAN → Ver correos disponibles hoy* muestra cuántos quedan. Si se agotan, se puede poner `CORREO_COMPROBANTES: false` (la web ya muestra el comprobante en pantalla) y se mantienen los códigos de acceso y los avisos al laboratorio. Si falla un correo, el préstamo igual queda registrado.
 
 ## Parámetros
 
@@ -41,6 +42,9 @@ Todos están al inicio de [`apps-script/Code.gs`](../apps-script/Code.gs), en `C
 | Parámetro | Valor inicial |
 | --- | --- |
 | `DOMINIOS_INTERNOS` | `unal.edu.co` |
+| `CORREOS_INTERNOS` | `oan.unal@gmail.com` (cuentas del OAN fuera del dominio institucional) |
+| `MAX_EQUIPOS_POR_SALIDA` | 30 |
+| `CORREO_COMPROBANTES` | `true` |
 | `PERMITIR_EXTERNOS` | `true` |
 | `APROBAR_FUERA_DEL_CAMPUS` | `true` |
 | `DIAS_TOKEN` (duración de la sesión) | 30 días |
