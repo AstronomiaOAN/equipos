@@ -789,6 +789,11 @@ async function vistaCatalogo() {
     : e.estado === 'prestado' && e.disponible_desde ? `Prestado hasta el ${formatoDiaCorto.format(new Date(e.disponible_desde))}`
     : (ESTADOS_EQUIPO[e.estado] || e.estado);
 
+  if (!equipos.length) {
+    mostrar(`<h1>Equipos del observatorio</h1>
+      <p class="vacio">Todavía no hay equipos registrados. El administrador los agrega en la pestaña Equipos de la hoja de cálculo.</p>`);
+    return;
+  }
   mostrar(`
     <h1>Equipos del observatorio</h1>
     <p class="entrada">${plural(equipos.length, 'equipo', 'equipos')}, ${plural(disponibles, 'disponible', 'disponibles')} ahora. Toque uno para ver su ficha, o agréguelo a su salida para pedir varios a la vez.</p>
