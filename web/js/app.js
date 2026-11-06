@@ -553,7 +553,10 @@ function escanearYVolver() {
 async function devolverSalida(loteId) {
   cargando();
   const r = await llamar('misPrestamos', { token: sesion.token });
-  if (!r.ok) return mostrar(`<p class="error">${esc(r.error)}</p>`);
+  if (!r.ok) {
+    if (r.codigo === 401) { cerrarSesion(false); return pedirSesion(location.search); }
+    return mostrar(`<p class="error">${esc(r.error)}</p>`);
+  }
   const items = r.prestamos.filter(p => p.lote_id === loteId && p.estado === 'activo');
   if (!items.length) return ir('?vista=mis', true);
   formularioDevolucion(items);
@@ -721,7 +724,10 @@ async function vistaGestion() {
   if (!sesion) return pedirSesion('?vista=gestion');
   cargando();
   const r = await llamar('misPrestamos', { token: sesion.token });
-  if (!r.ok) return mostrar(`<h1>Panel del laboratorio</h1><p class="error">${esc(r.error)}</p>`);
+  if (!r.ok) {
+    if (r.codigo === 401) { cerrarSesion(false); return pedirSesion('?vista=gestion'); }
+    return mostrar(`<h1>Panel del laboratorio</h1><p class="error">${esc(r.error)}</p>`);
+  }
   const g = r.gestion;
   if (!g) return mostrar('<h1>Panel del laboratorio</h1><p class="entrada">Su usuario no es responsable de ningún laboratorio. El administrador lo puede asignar en la hoja «Laboratorios».</p>');
   const vencidos = g.activos.filter(p => p.vencido);
