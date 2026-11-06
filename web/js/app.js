@@ -324,8 +324,9 @@ async function vistaEquipo(id) {
 
 function datosSolicitante(p) {
   return `<dl class="ficha solicitante">
-    <div><dt>Responsable</dt><dd>${esc(p.nombre)}<br><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></dd></div>
-    <div><dt>Para qué</dt><dd>${esc(p.proposito)}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
+    <div><dt>Responsable</dt><dd>${esc(p.nombre)}${p.tipo_usuario ? ` · ${esc(p.tipo_usuario)}` : ''}<br><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></dd></div>
+    <div><dt>Actividad</dt><dd>${esc(p.proposito)}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
+    ${p.lugar_uso ? `<div><dt>Dónde</dt><dd>${esc(p.lugar_uso)}</dd></div>` : ''}
     ${p.avalista_email ? `<div><dt>Avalista</dt><dd>${esc(p.avalista_email)}</dd></div>` : ''}
     <div><dt>Plazo</dt><dd>Salió el ${fecha(p.fecha_salida)}<br>Devolver a más tardar el ${dia(p.fecha_prevista)}</dd></div>
   </dl>`;
@@ -388,10 +389,6 @@ function vistaSalida() {
       <p class="ayuda">Solo se piden la primera vez.</p>
       <label for="nombre">Nombre completo</label>
       <input id="nombre" name="nombre" autocomplete="name" required>
-      ${externo
-        ? '<input type="hidden" name="tipo" value="Externo">'
-        : `<label for="tipo">Vinculación con la universidad</label>
-           <select id="tipo" name="tipo" required><option value="">Seleccione…</option>${opciones(catalogos.tipos_usuario.filter(t => t !== 'Externo'))}</select>`}
       <label class="casilla"><input type="checkbox" name="acepta_datos" required>
         <span>Autorizo el tratamiento de mis datos personales para gestionar el préstamo, según la <a href="${esc(CONFIG.URL_POLITICA_DATOS)}" target="_blank" rel="noopener">política de datos</a> (Ley 1581 de 2012).</span></label>
     </fieldset>`;
@@ -421,10 +418,16 @@ function vistaSalida() {
       ${perfil}
       <fieldset>
         <legend>Préstamo</legend>
-        <label for="proposito">¿Para qué ${varios ? 'los' : 'lo'} va a usar?</label>
+        ${externo ? '' : `<label for="tipo-usuario">Usted es</label>
+        <select id="tipo-usuario" name="tipo_usuario" required><option value="">Seleccione…</option>${opciones(catalogos.tipos_usuario.filter(t => t !== 'Externo'), u.tipo)}</select>`}
+        <label for="proposito">Tipo de actividad</label>
         <select id="proposito" name="proposito" required><option value="">Seleccione…</option>${opciones(catalogos.propositos)}</select>
-        <label for="descripcion">Actividad</label>
+        <label for="descripcion">Descripción breve</label>
         <input id="descripcion" name="descripcion" maxlength="300" placeholder="Ej.: observación pública de la Luna" required>
+        <fieldset class="grupo-opciones">
+          <legend>¿Dónde ${varios ? 'se usarán' : 'se usará'}?</legend>
+          ${(catalogos.lugares || []).map((l, i) => `<label class="casilla"><input type="radio" name="lugar_uso" value="${esc(l)}" required><span>${esc(l)}</span></label>`).join('')}
+        </fieldset>
         <label for="devolucion">Día de devolución</label>
         <div class="atajos" role="group" aria-label="Elegir rápido el día de devolución">
           ${atajos.map(([t, n]) => `<button type="button" class="chip" data-dias="${n}">${t}</button>`).join('')}
@@ -492,10 +495,11 @@ function vistaSalida() {
   form.addEventListener('submit', ev => {
     ev.preventDefault();
     if (form.nombre && form.nombre.value.trim().length < 3) return aviso(form, 'Escriba su nombre completo.');
-    if (form.tipo && !form.tipo.value) return aviso(form, 'Seleccione su vinculación con la universidad.');
+    if (form.tipo_usuario && !form.tipo_usuario.value) return aviso(form, 'Seleccione su vinculación con la universidad.');
     if (form.acepta_datos && !form.acepta_datos.checked) return aviso(form, 'Debe autorizar el tratamiento de datos para registrar el préstamo.');
     if (!form.proposito.value) return aviso(form, 'Seleccione para qué va a usar los equipos.');
     if (form.descripcion.value.trim().length < 3) return aviso(form, 'Escriba en pocas palabras la actividad.');
+    if (!form.lugar_uso.value) return aviso(form, 'Elija dónde se usarán los equipos.');
     const v = form.fecha_devolucion.value;
     if (!v || v < hoy || v > maximo) return aviso(form, `Elija un día de devolución entre hoy y el ${dia(finDelDia(maximo))}.`);
     if (!form.compromiso.checked) return aviso(form, 'Marque la casilla de compromiso para continuar.');
@@ -503,16 +507,19 @@ function vistaSalida() {
       equipos: equipos.map(e => e.id),
       proposito: form.proposito.value,
       descripcion: form.descripcion.value,
+      lugar_uso: form.lugar_uso.value,
+      tipo_usuario: externo ? 'Externo' : form.tipo_usuario.value,
       fecha_devolucion: v,
       fecha_prevista: finDelDia(v).toISOString(),
       avalista_email: form.avalista_email?.value || ''
     };
-    if (form.nombre) datos.perfil = { nombre: form.nombre.value, tipo: form.tipo.value, acepta_datos: form.acepta_datos.checked };
+    if (form.nombre) datos.perfil = { nombre: form.nombre.value, tipo: datos.tipo_usuario, acepta_datos: form.acepta_datos.checked };
     enviar(form, 'prestar', datos, r => {
       if (datos.perfil) {
-        sesion.usuario = { ...sesion.usuario, registrado: true, nombre: datos.perfil.nombre, tipo: datos.perfil.tipo };
-        almacen.escribir('oan-sesion', sesion);
+        sesion.usuario = { ...sesion.usuario, registrado: true, nombre: datos.perfil.nombre };
       }
+      sesion.usuario = { ...sesion.usuario, tipo: datos.tipo_usuario };
+      almacen.escribir('oan-sesion', sesion);
       salida.vaciar();
       pintarCabecera();
       comprobante(r.prestamos || [r.prestamo], 'prestamo');
@@ -635,8 +642,9 @@ function comprobante(prestamos, tipo) {
         <li><span class="titulo-prestamo">${esc(x.equipo_nombre)}</span>
         <span class="detalle">${esc(x.equipo_id)}${devolucion ? ` · ${esc(x.condicion_devolucion)}` : ''}</span></li>`).join('')}</ul>
       <dl class="ficha">
-        <div><dt>Responsable</dt><dd>${esc(p.nombre)}</dd></div>
-        ${devolucion ? '' : `<div><dt>Para qué</dt><dd>${esc(p.proposito)}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
+        <div><dt>Responsable</dt><dd>${esc(p.nombre)}${p.tipo_usuario ? `<br><span class="tenue">${esc(p.tipo_usuario)}</span>` : ''}</dd></div>
+        ${devolucion ? '' : `<div><dt>Actividad</dt><dd>${esc(p.proposito)}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
+        ${p.lugar_uso ? `<div><dt>Dónde</dt><dd>${esc(p.lugar_uso)}</dd></div>` : ''}
         <div><dt>Devolver a más tardar</dt><dd><strong>${dia(p.fecha_prevista)}</strong></dd></div>`}
         <div><dt>Número de salida</dt><dd>${esc(p.lote_id || p.id)}</dd></div>
       </dl>
@@ -678,7 +686,7 @@ function bloqueSalida({ lote, items }, propio, extra = () => '') {
   const p = items[0];
   return `<section class="salida">
     <p class="salida-titulo"><strong>${propio ? esc(p.proposito) : esc(p.nombre)}</strong>${propio ? '' : ` · ${esc(p.proposito)}`}<br>
-      <span class="tenue">${esc(p.descripcion)} · devolver a más tardar el ${dia(p.fecha_prevista)}</span></p>
+      <span class="tenue">${esc(p.descripcion)}${p.lugar_uso ? ` · ${esc(p.lugar_uso)}` : ''}${!propio && p.tipo_usuario ? ` · ${esc(p.tipo_usuario)}` : ''} · devolver a más tardar el ${dia(p.fecha_prevista)}</span></p>
     ${listaPrestamos(items, extra)}
     ${propio ? `<div class="acciones compactas">
       <button class="principal" data-devolver-lote="${esc(lote)}">${items.length > 1 ? `Devolver ${items.length} equipos` : 'Devolver'}</button>

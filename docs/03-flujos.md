@@ -11,7 +11,7 @@ flowchart TD
     C -- Disponible --> D{¿Tiene sesión<br/>en este celular?}
     D -- No --> E[Escribe su correo y<br/>el código que le llega]
     E --> F
-    D -- Sí --> F[Formulario:<br/>equipos, para qué,<br/>actividad, día de devolución]
+    D -- Sí --> F[Formulario:<br/>equipos, quién es, tipo de actividad,<br/>dónde se usará, día de devolución]
     F --> G[Préstamo activo<br/>se guarda la hora de salida]
     G --> H([Comprobante en pantalla<br/>y aviso al laboratorio])
 

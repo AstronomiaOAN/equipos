@@ -18,8 +18,8 @@
 
 | Cuándo | Datos |
 | --- | --- |
-| Solo la primera vez | Nombre completo, vinculación con la universidad (estudiante, docente, investigador, personal), autorización de datos |
-| En cada préstamo | Para qué (lista), la actividad en pocas palabras y el día de devolución; avalista solo si es externo |
+| Solo la primera vez | Nombre completo y autorización de datos |
+| En cada préstamo | **Quién es** (docente, estudiante de pregrado o posgrado, investigador, personal; viene marcado con lo de la vez anterior), **tipo de actividad** (lista), una descripción breve, **dónde se usará** (en el OAN, en el campus de la UNAL o fuera del campus) y el día de devolución; avalista solo si es externo |
 | En cada devolución | El estado de cada equipo (Bueno por defecto); la descripción solo si está dañado o incompleto |
 
 No hay campos opcionales.
@@ -29,7 +29,7 @@ No hay campos opcionales.
 | Cuándo | A quién | Contenido |
 | --- | --- | --- |
 | Inicio de sesión | Usuario | Código de 6 dígitos, válido 10 minutos |
-| Préstamo | **Responsables del laboratorio** (y avalista, si es externo) | Quién, para qué, lista de equipos y día de devolución |
+| Préstamo | **Responsables del laboratorio** (y avalista, si es externo) | Quién y su vinculación, tipo de actividad, dónde se usará, lista de equipos y día de devolución |
 | Préstamo | Usuario | Comprobante (uno por salida) |
 | Devolución | **Responsables del laboratorio** | Lista de equipos y su estado; resaltado si hay daño o faltante |
 | Devolución | Usuario | Comprobante |
@@ -61,4 +61,4 @@ Todos están al inicio de [`apps-script/Code.gs`](../apps-script/Code.gs), en `C
 | `HORAS_RECORDATORIO` | 24 |
 | `CORREO_COPIA_ALERTAS` | vacío (opcional: un buzón del OAN que reciba copia de todos los avisos) |
 
-Las listas de propósitos, tipos de usuario, condiciones y tipos de daño están en `CATALOGOS`. Si se cambian, hay que cambiarlas también en [`web/js/catalogos.js`](../web/js/catalogos.js) para el modo demostración (con el servidor conectado, la web usa las del servidor).
+Las listas de tipos de actividad (`propositos`), lugares de uso (`lugares`), tipos de usuario, condiciones y tipos de daño están en `CATALOGOS`. Si se cambian, hay que cambiarlas también en [`web/js/catalogos.js`](../web/js/catalogos.js) para el modo demostración (con el servidor conectado, la web usa las del servidor).

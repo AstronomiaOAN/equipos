@@ -7,7 +7,7 @@
 1. Escanee el QR del equipo con la cámara del celular.
 2. Toque **Prestar este equipo**.
 3. La primera vez: escriba su correo, copie el código que le llega y complete sus datos.
-4. Diga para qué lo va a usar, la actividad y qué día lo devuelve (hasta 7 días calendario), y toque **Registrar préstamo**. Queda activo de inmediato, sin aprobación.
+4. Indique quién es (docente, estudiante…), el tipo de actividad, una descripción breve, dónde lo usará (en el OAN, en el campus de la UNAL o fuera) y qué día lo devuelve (hasta 7 días calendario), y toque **Registrar préstamo**. Queda activo de inmediato, sin aprobación.
 5. Le llega el comprobante por correo y el laboratorio recibe el aviso.
 
 **Sacar varios equipos para una misma actividad**

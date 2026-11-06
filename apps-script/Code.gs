@@ -40,7 +40,7 @@ const HOJAS = {
   Usuarios: ['email', 'nombre', 'tipo', 'rol', 'activo', 'acepta_datos', 'fecha_registro'],
   Prestamos: ['id', 'lote_id', 'equipo_id', 'email', 'nombre', 'tipo_usuario', 'proposito', 'descripcion',
     'avalista_email', 'fecha_solicitud', 'fecha_salida', 'fecha_prevista', 'fecha_devolucion', 'estado',
-    'condicion_devolucion', 'obs_devolucion', 'componentes_ok', 'devuelto_por', 'recordatorio_enviado'],
+    'condicion_devolucion', 'obs_devolucion', 'componentes_ok', 'devuelto_por', 'recordatorio_enviado', 'lugar_uso'],
   Incidencias: ['id', 'equipo_id', 'prestamo_id', 'email', 'tipo', 'descripcion', 'fecha',
     'estado', 'resuelto_por', 'fecha_cierre', 'solucion'],
   Bitacora: ['fecha', 'email', 'accion', 'detalle']
@@ -49,6 +49,7 @@ const HOJAS = {
 const CATALOGOS = {
   propositos: ['Docencia (clase)', 'Práctica de laboratorio', 'Investigación / tesis',
     'Observación astronómica', 'Divulgación / evento público', 'Mantenimiento o calibración', 'Otro'],
+  lugares: ['En el OAN', 'En el campus de la UNAL', 'Fuera del campus'],
   tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente', 'Investigador',
     'Personal técnico o administrativo', 'Externo'],
   condiciones: ['Bueno', 'Con detalles menores', 'Dañado', 'Incompleto'],
@@ -355,7 +356,15 @@ function accionPrestar_(d) {
     throw new ErrorApp('No están disponibles: ' +
       ocupados.map(e => e.id + ' (' + e.estado.replace('_', ' ') + ')').join(', ') + '. Quítelos de la lista.', 409);
   }
-  const proposito = enLista_(d.proposito, CATALOGOS.propositos, 'para qué los va a usar');
+  // La vinculación se confirma en cada préstamo (puede cambiar: un estudiante se gradúa, etc.).
+  if (d.tipo_usuario && usuario.tipo !== 'Externo' && d.tipo_usuario !== usuario.tipo) {
+    if (d.tipo_usuario === 'Externo' || CATALOGOS.tipos_usuario.indexOf(d.tipo_usuario) < 0) {
+      throw new ErrorApp('Seleccione su vinculación con la universidad.');
+    }
+    actualizar_('Usuarios', usuario, { tipo: d.tipo_usuario });
+  }
+  const proposito = enLista_(d.proposito, CATALOGOS.propositos, 'el tipo de actividad');
+  const lugar = enLista_(d.lugar_uso, CATALOGOS.lugares, 'dónde se usarán los equipos');
   const descripcion = texto_(d.descripcion, 300);
   if (descripcion.length < 3) throw new ErrorApp('Escriba en pocas palabras la actividad.');
   const prevista = fechaDevolucion_(d);
@@ -373,7 +382,7 @@ function accionPrestar_(d) {
   const items = equipos.map(eq => {
     const p = {
       id: nuevoId_('P'), lote_id: loteId, equipo_id: eq.id, email: s.email, nombre: usuario.nombre,
-      tipo_usuario: usuario.tipo, proposito: proposito, descripcion: descripcion, avalista_email: avalista,
+      tipo_usuario: usuario.tipo, proposito: proposito, descripcion: descripcion, lugar_uso: lugar, avalista_email: avalista,
       fecha_solicitud: ahora, fecha_salida: ahora, fecha_prevista: prevista, estado: 'activo'
     };
     agregar_('Prestamos', p);
@@ -1254,8 +1263,8 @@ function urlFoto_(valor) {
 function prestamoPublico_(p, eq) {
   return {
     id: p.id, lote_id: p.lote_id || p.id, equipo_id: p.equipo_id, equipo_nombre: eq ? eq.nombre : p.equipo_id,
-    nombre: p.nombre, email: p.email, proposito: p.proposito, descripcion: p.descripcion,
-    avalista_email: p.avalista_email,
+    nombre: p.nombre, email: p.email, tipo_usuario: p.tipo_usuario, proposito: p.proposito, descripcion: p.descripcion,
+    lugar_uso: p.lugar_uso || '', avalista_email: p.avalista_email,
     fecha_solicitud: iso_(p.fecha_solicitud), fecha_salida: iso_(p.fecha_salida),
     fecha_prevista: iso_(p.fecha_prevista), fecha_devolucion: iso_(p.fecha_devolucion),
     estado: p.estado, vencido: estaVencido_(p), condicion_devolucion: p.condicion_devolucion || '',
@@ -1268,8 +1277,9 @@ function detalleSalida_(items, devolucion) {
   const p = items[0].p;
   const fila = (k, v) => v ? '<tr><td style="color:#666;padding:3px 12px 3px 0">' + k + '</td><td>' + esc_(v) + '</td></tr>' : '';
   const datos = '<table style="border-collapse:collapse;margin-bottom:12px">' +
-    fila('Responsable', p.nombre + ' · ' + p.email) + fila('Propósito', p.proposito) +
-    fila('Actividad', p.descripcion) + fila('Devolver a más tardar', fechaDia_(p.fecha_prevista)) +
+    fila('Responsable', p.nombre + ' · ' + p.email) + fila('Tipo de actividad', p.proposito) +
+    fila('Vinculación', p.tipo_usuario) + fila('Actividad', p.descripcion) + fila('Dónde se usará', p.lugar_uso) +
+    fila('Devolver a más tardar', fechaDia_(p.fecha_prevista)) +
     fila('Número de salida', p.lote_id) + '</table>';
   const celda = 'style="border-bottom:1px solid #ddd;padding:4px 10px 4px 0;text-align:left"';
   const equipos = '<table style="border-collapse:collapse"><tr><th ' + celda + '>Equipo</th><th ' + celda + '>Código</th><th ' +

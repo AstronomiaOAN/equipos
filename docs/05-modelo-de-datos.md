@@ -96,7 +96,7 @@ erDiagram
 | Columna | Notas |
 | --- | --- |
 | `email` | Identificador; se verifica con el código enviado |
-| `nombre`, `tipo` | Los escribe la persona la primera vez. `tipo`: estudiante de pregrado o posgrado, docente, investigador, personal técnico o administrativo, externo |
+| `nombre`, `tipo` | El nombre se escribe la primera vez; la vinculación se confirma en cada préstamo y se actualiza si cambia. `tipo`: estudiante de pregrado o posgrado, docente, investigador, personal técnico o administrativo, externo |
 | `rol` | `usuario` por defecto. Escribir `admin` para dar acceso a todos los laboratorios |
 | `activo` | Escribir `NO` para bloquear a alguien |
 | `acepta_datos` | Fecha en que autorizó el tratamiento de datos |
@@ -108,9 +108,10 @@ erDiagram
 | --- | --- |
 | `id` | `P-251105-3F9A1C` |
 | `equipo_id`, `email` | Quién y qué |
-| `nombre`, `tipo_usuario` | Copia al momento del préstamo, para que el historial no cambie si la persona edita su perfil |
-| `proposito` | Docencia (clase), Práctica de laboratorio, Investigación / tesis, Observación astronómica, Divulgación / evento público, Mantenimiento o calibración, Otro |
-| `descripcion` | La actividad, en pocas palabras |
+| `nombre`, `tipo_usuario` | Nombre y vinculación (docente, estudiante…) al momento del préstamo |
+| `proposito` | Tipo de actividad: Docencia (clase), Práctica de laboratorio, Investigación / tesis, Observación astronómica, Divulgación / evento público, Mantenimiento o calibración, Otro |
+| `descripcion` | Descripción breve de la actividad |
+| `lugar_uso` | En el OAN, En el campus de la UNAL o Fuera del campus |
 | `avalista_email` | Solo para usuarios externos |
 | `fecha_solicitud` | Cuando se llenó el formulario |
 | `fecha_salida` | **Cuando el equipo salió** (al registrar el préstamo) |
@@ -134,5 +135,5 @@ Cada inicio de sesión, préstamo, devolución y reporte queda con `fecha`, `ema
 
 - Un equipo tiene **como máximo un préstamo activo**. En la hoja lo garantiza el bloqueo de Apps Script; en PostgreSQL, un índice único parcial.
 - Los textos escritos por los usuarios que empiezan por `=`, `+`, `-` o `@` se guardan con un apóstrofo delante, para que la hoja no los interprete como fórmulas.
-- Las hojas creadas con versiones anteriores pueden tener columnas que ya no se usan (`nivel_control`, `max_dias`, `dependencia`, `telefono`, `curso_proyecto`, `lugar_uso`, `condicion_salida`, `aprobado_por`, `motivo_rechazo`, `verificado_por`, `fecha_verificacion`). Se pueden dejar o borrar; el sistema las ignora.
+- Las hojas creadas con versiones anteriores pueden tener columnas que ya no se usan (`nivel_control`, `max_dias`, `dependencia`, `telefono`, `curso_proyecto`, `condicion_salida`, `aprobado_por`, `motivo_rechazo`, `verificado_por`, `fecha_verificacion`). Se pueden dejar o borrar; el sistema las ignora.
 - Se pueden agregar columnas propias al final de cualquier pestaña (por ejemplo `placa_inventario` en `Equipos`); el sistema las respeta.

@@ -180,7 +180,12 @@ const ACCIONES = {
     const eqs = ids(d.equipos || d.equipo_id).map(id => equipo(db, id));
     const ocupados = eqs.filter(e => e.estado !== 'disponible');
     if (ocupados.length) throw new ErrorDemo(`No están disponibles: ${ocupados.map(e => `${e.id} (${e.estado})`).join(', ')}. Quítelos de la lista.`, 409);
-    const proposito = enLista(d.proposito, CATALOGOS.propositos, 'para qué los va a usar');
+    if (d.tipo_usuario && usuario.tipo !== 'Externo' && d.tipo_usuario !== usuario.tipo) {
+      if (d.tipo_usuario === 'Externo' || !CATALOGOS.tipos_usuario.includes(d.tipo_usuario)) throw new ErrorDemo('Seleccione su vinculación con la universidad.');
+      usuario.tipo = d.tipo_usuario;
+    }
+    const proposito = enLista(d.proposito, CATALOGOS.propositos, 'el tipo de actividad');
+    const lugar = enLista(d.lugar_uso, CATALOGOS.lugares, 'dónde se usarán los equipos');
     const descripcion = texto(d.descripcion, 300);
     if (descripcion.length < 3) throw new ErrorDemo('Escriba en pocas palabras la actividad.');
     const diaDev = String(d.fecha_devolucion || '');
@@ -197,7 +202,7 @@ const ACCIONES = {
     const creados = eqs.map(eq => {
       const p = {
         id: nuevoId('P'), lote_id: lote, equipo_id: eq.id, email: s.email, nombre: usuario.nombre, tipo_usuario: usuario.tipo,
-        proposito, descripcion, avalista_email: avalista, fecha_solicitud: ahora, fecha_salida: ahora,
+        proposito, descripcion, lugar_uso: lugar, avalista_email: avalista, fecha_solicitud: ahora, fecha_salida: ahora,
         fecha_prevista: new Date(diaDev + 'T23:59:00-05:00').toISOString(), fecha_devolucion: '', estado: 'activo'
       };
       db.prestamos.push(p);

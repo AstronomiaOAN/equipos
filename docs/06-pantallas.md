@@ -23,8 +23,8 @@ Lo más grande es el código del equipo, para que la persona confirme de un vist
 <img src="img/salida-varios-equipos.png" width="300" alt="Formulario de préstamo con tres equipos en la lista, botón para escanear otro QR y datos de la actividad">
 
 - **Equipos**: la lista de lo que sale, con «Quitar» en cada uno, el botón **Escanear otro QR** (abre la cámara dentro de la página y lee varios QR seguidos) y un campo para escribir un código.
-- **Sus datos** solo aparece la primera vez: nombre, vinculación y la autorización de tratamiento de datos.
-- **Préstamo**, una sola vez para todos los equipos: para qué (lista), la actividad en pocas palabras y el **día de devolución**, con atajos «Hoy», «Mañana», «En 3 días» y «En una semana» (máximo 7 días calendario).
+- **Sus datos** solo aparece la primera vez: nombre y la autorización de tratamiento de datos.
+- **Préstamo**, una sola vez para todos los equipos: **quién es** (vinculación, ya marcada con la de la vez anterior), **tipo de actividad** (lista), una descripción breve, **dónde se usarán** (en el OAN, en el campus de la UNAL o fuera del campus) y el **día de devolución**, con atajos «Hoy», «Mañana», «En 3 días» y «En una semana» (máximo 7 días calendario).
 - La casilla de compromiso. No hay campos opcionales ni aprobación: al registrar, el préstamo queda activo.
 
 ## Comprobante

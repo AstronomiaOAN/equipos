@@ -61,6 +61,7 @@ CREATE TABLE prestamos (
     tipo_usuario         text NOT NULL,
     proposito            text NOT NULL,
     descripcion          text NOT NULL,
+    lugar_uso            text NOT NULL,          -- En el OAN, En el campus de la UNAL, Fuera del campus
     avalista_email       text,
     fecha_solicitud      timestamptz NOT NULL DEFAULT now(),
     fecha_salida         timestamptz NOT NULL DEFAULT now(),

@@ -9,7 +9,7 @@ const { crearEntorno } = require('./simulador');
 /** Día calendario en Colombia, n días después de hoy (AAAA-MM-DD). */
 const dia = n => new Date(Date.now() - 5 * 36e5 + n * 864e5).toISOString().slice(0, 10);
 const PERFIL = { nombre: 'Ana Pérez', tipo: 'Estudiante de pregrado', acepta_datos: true };
-const SOLICITUD = { proposito: 'Práctica de laboratorio', descripcion: 'Práctica de fotometría' };
+const SOLICITUD = { proposito: 'Práctica de laboratorio', descripcion: 'Práctica de fotometría', lugar_uso: 'En el OAN' };
 
 function preparar() {
   const e = crearEntorno();
@@ -286,4 +286,22 @@ test('acciones de aprobación ya no existen', () => {
   for (const accion of ['aprobar', 'verificar', 'cancelar']) {
     assert.match(e.llamar({ accion }).error, /Acción no válida/);
   }
+});
+
+test('cada préstamo registra vinculación, tipo de actividad y lugar de uso', () => {
+  const e = preparar();
+  const { token } = e.iniciarSesion('ana@unal.edu.co');
+  assert.match(prestar(e, token, ['OAN-TEL-0001'], { lugar_uso: '' }).error, /dónde se usarán/);
+  assert.equal(prestar(e, token, ['OAN-TEL-0001'], { lugar_uso: 'Fuera del campus' }).ok, true);
+  let p = e.leer('Prestamos')[0];
+  assert.equal(p.lugar_uso, 'Fuera del campus');
+  assert.equal(p.tipo_usuario, 'Estudiante de pregrado');
+  // En el siguiente préstamo la persona actualiza su vinculación
+  const r = e.llamar({ accion: 'prestar', token, equipos: ['OAN-CAM-0001'], ...SOLICITUD, lugar_uso: 'En el campus de la UNAL',
+    tipo_usuario: 'Estudiante de posgrado', fecha_devolucion: dia(1) });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.prestamo.tipo_usuario, 'Estudiante de posgrado');
+  assert.equal(e.leer('Usuarios')[0].tipo, 'Estudiante de posgrado');
+  assert.ok(e.correos.some(c => c.to === 'tecnico@unal.edu.co' && c.htmlBody.includes('En el campus de la UNAL')));
+  assert.equal(e.llamar({ accion: 'prestar', token, equipos: ['OAN-MON-0001'], ...SOLICITUD, tipo_usuario: 'Externo', fecha_devolucion: dia(1) }).ok, false);
 });
