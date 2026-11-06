@@ -46,3 +46,4 @@
 - **Dar acceso total:** `rol = admin` en `Usuarios`.
 - **Bloquear a alguien:** `activo = NO` en `Usuarios`.
 - **Si se pierde un celular con sesión abierta o hay sospecha de abuso:** menú *Préstamos OAN → Cerrar todas las sesiones*.
+- **Empezar de cero** (por ejemplo, borrar los préstamos de prueba): menú *Préstamos OAN → Borrar todos los datos…*. Borra préstamos, usuarios, novedades y bitácora, y deja los laboratorios y los 20 equipos de ejemplo. No cambia la dirección de la página.

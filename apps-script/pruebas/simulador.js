@@ -111,7 +111,7 @@ function crearEntorno() {
   vm.createContext(contexto);
   const codigo = fs.readFileSync(path.join(__dirname, '..', 'Code.gs'), 'utf8');
   // Exponer las declaraciones de nivel superior en el contexto.
-  vm.runInContext(codigo + '\n;globalThis.__exports = { CONFIG, HOJAS, CATALOGOS, doGet, doPost, configurar, revisarVencimientos, cargarCatalogoDeEjemplo };', contexto);
+  vm.runInContext(codigo + '\n;globalThis.__exports = { CONFIG, HOJAS, CATALOGOS, doGet, doPost, configurar, revisarVencimientos, cargarCatalogoDeEjemplo, reiniciarBase_ };', contexto);
   const api = contexto.__exports;
 
   const llamar = datos => JSON.parse(api.doPost({ postData: { contents: JSON.stringify(datos) } }).texto);

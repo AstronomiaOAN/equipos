@@ -311,3 +311,20 @@ test('cada préstamo registra vinculación, tipo de actividad y lugar de uso', (
   assert.equal(x.ok, true, x.error);
   assert.equal(x.prestamo.tipo_usuario, 'Externo a la UNAL');
 });
+
+test('reiniciar la base borra préstamos y usuarios y deja los equipos de ejemplo disponibles', () => {
+  const e = crearEntorno();
+  e.api.configurar();
+  const { token } = e.iniciarSesion('ana@unal.edu.co');
+  const perfil = { nombre: 'Ana Pérez', tipo: 'Docente', acepta_datos: true };
+  const id = e.leer('Equipos')[0].id;
+  const r = e.llamar({ accion: 'prestar', token, equipos: [id], ...SOLICITUD, tipo_usuario: 'Docente', fecha_devolucion: dia(1), perfil });
+  assert.equal(r.ok, true, r.error);
+  e.api.reiniciarBase_();
+  assert.equal(e.leer('Prestamos').length, 0);
+  assert.equal(e.leer('Bitacora').length, 0);
+  assert.deepEqual(e.leer('Usuarios').map(u => u.email), ['oan.unal@gmail.com']);
+  assert.equal(e.leer('Equipos').length, 20);
+  assert.ok(e.leer('Equipos').every(x => x.estado === 'disponible'));
+  assert.equal(e.llamar({ accion: 'misPrestamos', token }).ok, false);
+});

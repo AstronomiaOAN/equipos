@@ -1106,6 +1106,38 @@ function cerrarTodasLasSesiones() {
     .setProperty('SECRETO_TOKEN', Utilities.getUuid() + Utilities.getUuid());
 }
 
+/**
+ * Deja la base de datos como recién instalada: borra préstamos, usuarios, novedades y la
+ * bitácora, vuelve a crear los laboratorios y los 20 equipos de ejemplo, y cierra todas las
+ * sesiones. Pide confirmación. No cambia la URL de la aplicación web.
+ */
+function borrarTodosLosDatos() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.alert('Borrar todos los datos',
+    'Se borrarán TODOS los préstamos, usuarios, novedades y la bitácora, y los laboratorios y equipos ' +
+    'volverán a los 20 de ejemplo. Esto no se puede deshacer.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) return;
+  reiniciarBase_();
+  ui.alert('Listo. La base de datos quedó como nueva. Todas las personas deberán iniciar sesión otra vez.');
+}
+
+function reiniciarBase_() {
+  const candado = LockService.getScriptLock();
+  if (!candado.tryLock(30000)) throw new Error('El sistema está ocupado. Intente de nuevo en un minuto.');
+  try {
+    const libro = SpreadsheetApp.getActive();
+    if (!libro.getSheetByName('Instrucciones')) libro.insertSheet('Instrucciones', 0);
+    Object.keys(HOJAS).forEach(nombre => {
+      const h = libro.getSheetByName(nombre);
+      if (h) libro.deleteSheet(h);
+    });
+    cerrarTodasLasSesiones();
+    configurar();
+  } finally {
+    candado.releaseLock();
+  }
+}
+
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Préstamos OAN')
     .addItem('Configurar hojas', 'configurar')
@@ -1115,6 +1147,7 @@ function onOpen() {
     .addItem('Cargar catálogo de ejemplo (20 equipos)', 'cargarCatalogoDeEjemplo')
     .addSeparator()
     .addItem('Cerrar todas las sesiones', 'cerrarTodasLasSesiones')
+    .addItem('Borrar todos los datos…', 'borrarTodosLosDatos')
     .addToUi();
 }
 
