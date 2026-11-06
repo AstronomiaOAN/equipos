@@ -1112,7 +1112,14 @@ function cerrarTodasLasSesiones() {
  * Solo queda la cuenta del OAN como administradora. Cierra todas las sesiones. No cambia la URL.
  */
 function borrarTodosLosDatos() {
-  const ui = SpreadsheetApp.getUi();
+  let ui;
+  try { ui = SpreadsheetApp.getUi(); } catch (err) { ui = null; }
+  if (!ui) {
+    // Ejecutado desde el editor de Apps Script (botón «Ejecutar»): no hay ventana para confirmar.
+    reiniciarBase_();
+    console.log('Listo: se borraron préstamos, usuarios, novedades y bitácora; se conservaron los equipos.');
+    return;
+  }
   const r = ui.alert('Borrar todos los datos',
     'Se borrarán TODOS los préstamos, usuarios, novedades y la bitácora. Se conservan los equipos y ' +
     'los laboratorios, y todos los equipos quedarán disponibles. Esto no se puede deshacer.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
