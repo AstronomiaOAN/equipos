@@ -16,7 +16,7 @@ Página estática, sin dependencias ni paso de compilación: HTML, CSS y módulo
 
 ## Modo demostración
 
-Mientras `API_URL` esté vacía, la página funciona sola con equipos de ejemplo y guarda todo en el navegador. Sirve para mostrar el sistema y capacitar al personal antes de instalar el backend. El código de inicio de sesión aparece en pantalla, y con el correo `tecnico@unal.edu.co` se ve el panel del laboratorio.
+Mientras `API_URL` esté vacía, la página funciona sola con equipos de ejemplo y guarda todo en el navegador. Sigue las mismas reglas que el sistema real: préstamo y devolución inmediatos y plazo de hasta 7 días calendario. Sirve para mostrar el sistema y capacitar al personal antes de instalar el backend. El código de inicio de sesión aparece en pantalla, y con el correo `tecnico@unal.edu.co` se ve el panel del laboratorio.
 
 ## Probar en el computador
 
