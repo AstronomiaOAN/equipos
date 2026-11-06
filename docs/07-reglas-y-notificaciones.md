@@ -19,7 +19,7 @@
 | Cuándo | Datos |
 | --- | --- |
 | Solo la primera vez | Nombre completo y autorización de datos |
-| En cada préstamo | **Quién es** (docente, estudiante de pregrado o posgrado, investigador, personal; viene marcado con lo de la vez anterior), **tipo de actividad** (lista), una descripción breve, **dónde se usará** (en el OAN, en el campus de la UNAL o fuera del campus) y el día de devolución; avalista solo si es externo |
+| En cada préstamo | **Quién es** (estudiante de pregrado o posgrado, docente, personal técnico o administrativo, o externo a la UNAL; viene marcado con lo de la vez anterior), **tipo de actividad** (lista), una descripción breve, **dónde se usará** (en el OAN, en el campus de la UNAL o fuera del campus) y el día de devolución; avalista solo si es externo a la UNAL |
 | En cada devolución | El estado de cada equipo (Bueno por defecto); la descripción solo si está dañado o incompleto |
 
 No hay campos opcionales.

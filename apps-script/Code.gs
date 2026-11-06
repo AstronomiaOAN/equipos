@@ -50,8 +50,8 @@ const CATALOGOS = {
   propositos: ['Docencia (clase)', 'Práctica de laboratorio', 'Investigación / tesis',
     'Observación astronómica', 'Divulgación / evento público', 'Mantenimiento o calibración', 'Otro'],
   lugares: ['En el OAN', 'En el campus de la UNAL', 'Fuera del campus'],
-  tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente', 'Investigador',
-    'Personal técnico o administrativo', 'Externo'],
+  tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente',
+    'Personal técnico o administrativo', 'Externo a la UNAL'],
   condiciones: ['Bueno', 'Con detalles menores', 'Dañado', 'Incompleto'],
   tipos_incidencia: ['Daño', 'Faltante', 'Falla de funcionamiento', 'Requiere calibración', 'Otro']
 };
@@ -230,9 +230,9 @@ function accionPerfil_(d) {
 function guardarPerfil_(email, perfil) {
   const nombre = texto_(perfil.nombre, 120);
   if (nombre.length < 3) throw new ErrorApp('Escriba su nombre completo.');
-  // Un correo no institucional siempre es "Externo"; uno institucional no puede declararse externo.
-  const tipo = esInterno_(email) ? perfil.tipo : 'Externo';
-  if (CATALOGOS.tipos_usuario.indexOf(tipo) < 0 || (esInterno_(email) && tipo === 'Externo')) {
+  // Un correo no institucional siempre es externo; uno institucional elige su vinculación.
+  const tipo = esInterno_(email) ? perfil.tipo : EXTERNO;
+  if (CATALOGOS.tipos_usuario.indexOf(tipo) < 0) {
     throw new ErrorApp('Seleccione el tipo de usuario.');
   }
   const existente = buscarUsuario_(email);
@@ -257,7 +257,7 @@ function usuarioPublico_(email, u) {
     registrado: !!u,
     interno: esInterno_(email),
     nombre: u ? u.nombre : '',
-    tipo: u ? u.tipo : (esInterno_(email) ? '' : 'Externo'),
+    tipo: u ? u.tipo : (esInterno_(email) ? '' : EXTERNO),
     rol: u ? (u.rol || 'usuario') : 'usuario',
     gestiona: laboratoriosQueGestiona_(email, u).map(l => l.id)
   };
@@ -357,12 +357,10 @@ function accionPrestar_(d) {
       ocupados.map(e => e.id + ' (' + e.estado.replace('_', ' ') + ')').join(', ') + '. Quítelos de la lista.', 409);
   }
   // La vinculación se confirma en cada préstamo (puede cambiar: un estudiante se gradúa, etc.).
-  if (d.tipo_usuario && usuario.tipo !== 'Externo' && d.tipo_usuario !== usuario.tipo) {
-    if (d.tipo_usuario === 'Externo' || CATALOGOS.tipos_usuario.indexOf(d.tipo_usuario) < 0) {
-      throw new ErrorApp('Seleccione su vinculación con la universidad.');
-    }
-    actualizar_('Usuarios', usuario, { tipo: d.tipo_usuario });
-  }
+  let tipo = usuario.tipo;
+  if (!esInterno_(s.email)) tipo = EXTERNO;
+  else if (d.tipo_usuario) tipo = enLista_(d.tipo_usuario, CATALOGOS.tipos_usuario, 'su vinculación con la universidad');
+  if (tipo !== usuario.tipo) actualizar_('Usuarios', usuario, { tipo: tipo });
   const proposito = enLista_(d.proposito, CATALOGOS.propositos, 'el tipo de actividad');
   const lugar = enLista_(d.lugar_uso, CATALOGOS.lugares, 'dónde se usarán los equipos');
   const descripcion = texto_(d.descripcion, 300);
@@ -370,7 +368,7 @@ function accionPrestar_(d) {
   const prevista = fechaDevolucion_(d);
 
   let avalista = '';
-  if (usuario.tipo === 'Externo') {
+  if (esExterno_(tipo)) {
     avalista = normalizarEmail_(d.avalista_email);
     if (!esInterno_(avalista)) {
       throw new ErrorApp('Los usuarios externos necesitan un avalista con correo institucional.');
@@ -382,7 +380,7 @@ function accionPrestar_(d) {
   const items = equipos.map(eq => {
     const p = {
       id: nuevoId_('P'), lote_id: loteId, equipo_id: eq.id, email: s.email, nombre: usuario.nombre,
-      tipo_usuario: usuario.tipo, proposito: proposito, descripcion: descripcion, lugar_uso: lugar, avalista_email: avalista,
+      tipo_usuario: tipo, proposito: proposito, descripcion: descripcion, lugar_uso: lugar, avalista_email: avalista,
       fecha_solicitud: ahora, fecha_salida: ahora, fecha_prevista: prevista, estado: 'activo'
     };
     agregar_('Prestamos', p);
@@ -1345,6 +1343,9 @@ function esInterno_(email) {
 function texto_(v, max) {
   return String(v === undefined || v === null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max || 200);
 }
+
+const EXTERNO = 'Externo a la UNAL';
+function esExterno_(tipo) { return tipo === EXTERNO || tipo === 'Externo'; }
 
 function enLista_(v, lista, nombre) {
   if (lista.indexOf(v) < 0) throw new ErrorApp('Seleccione ' + nombre + '.');

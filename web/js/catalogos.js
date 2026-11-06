@@ -4,8 +4,8 @@ export const CATALOGOS = {
   propositos: ['Docencia (clase)', 'Práctica de laboratorio', 'Investigación / tesis',
     'Observación astronómica', 'Divulgación / evento público', 'Mantenimiento o calibración', 'Otro'],
   lugares: ['En el OAN', 'En el campus de la UNAL', 'Fuera del campus'],
-  tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente', 'Investigador',
-    'Personal técnico o administrativo', 'Externo'],
+  tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente',
+    'Personal técnico o administrativo', 'Externo a la UNAL'],
   condiciones: ['Bueno', 'Con detalles menores', 'Dañado', 'Incompleto'],
   tipos_incidencia: ['Daño', 'Faltante', 'Falla de funcionamiento', 'Requiere calibración', 'Otro']
 };

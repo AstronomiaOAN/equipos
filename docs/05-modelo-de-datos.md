@@ -96,7 +96,7 @@ erDiagram
 | Columna | Notas |
 | --- | --- |
 | `email` | Identificador; se verifica con el código enviado |
-| `nombre`, `tipo` | El nombre se escribe la primera vez; la vinculación se confirma en cada préstamo y se actualiza si cambia. `tipo`: estudiante de pregrado o posgrado, docente, investigador, personal técnico o administrativo, externo |
+| `nombre`, `tipo` | El nombre se escribe la primera vez; la vinculación se confirma en cada préstamo y se actualiza si cambia. `tipo`: Estudiante de pregrado, Estudiante de posgrado, Docente, Personal técnico o administrativo, Externo a la UNAL. Un correo que no es de la UNAL siempre queda como externo |
 | `rol` | `usuario` por defecto. Escribir `admin` para dar acceso a todos los laboratorios |
 | `activo` | Escribir `NO` para bloquear a alguien |
 | `acepta_datos` | Fecha en que autorizó el tratamiento de datos |

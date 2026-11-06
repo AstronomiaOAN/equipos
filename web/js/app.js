@@ -378,6 +378,8 @@ function vistaSalida() {
   }
   const u = sesion.usuario || {};
   const externo = !u.interno;
+  const EXTERNO = 'Externo a la UNAL';
+  const tipoActual = u.tipo === 'Externo' ? EXTERNO : u.tipo;
   const varios = equipos.length > 1;
   const hoy = hoyBogota();
   const maximo = sumarDias(hoy, DIAS_MAX_PRESTAMO);
@@ -418,8 +420,11 @@ function vistaSalida() {
       ${perfil}
       <fieldset>
         <legend>Préstamo</legend>
-        ${externo ? '' : `<label for="tipo-usuario">Usted es</label>
-        <select id="tipo-usuario" name="tipo_usuario" required><option value="">Seleccione…</option>${opciones(catalogos.tipos_usuario.filter(t => t !== 'Externo'), u.tipo)}</select>`}
+        <label for="tipo-usuario">Usted es</label>
+        <select id="tipo-usuario" name="tipo_usuario" required>${externo
+          ? opciones([EXTERNO], EXTERNO)
+          : `<option value="">Seleccione…</option>${opciones(catalogos.tipos_usuario, tipoActual)}`}</select>
+        ${externo ? '<p class="ayuda">Su correo no es de la UNAL, por eso se registra como externo.</p>' : ''}
         <label for="proposito">Tipo de actividad</label>
         <select id="proposito" name="proposito" required><option value="">Seleccione…</option>${opciones(catalogos.propositos)}</select>
         <label for="descripcion">Descripción breve</label>
@@ -434,9 +439,11 @@ function vistaSalida() {
         </div>
         <input id="devolucion" name="fecha_devolucion" type="date" min="${hoy}" max="${maximo}" value="${sumarDias(hoy, 1)}" required>
         <p class="ayuda" id="ayuda-devolucion"></p>
-        ${externo ? `<label for="avalista">Correo institucional de su avalista</label>
-          <input id="avalista" name="avalista_email" type="email" inputmode="email" placeholder="docente@unal.edu.co" required>
-          <p class="ayuda">Docente o funcionario de la universidad que responde por el préstamo.</p>` : ''}
+        <div id="bloque-avalista"${externo || tipoActual === EXTERNO ? '' : ' hidden'}>
+          <label for="avalista">Correo institucional de su avalista</label>
+          <input id="avalista" name="avalista_email" type="email" inputmode="email" placeholder="docente@unal.edu.co">
+          <p class="ayuda">Docente o funcionario de la universidad que responde por el préstamo.</p>
+        </div>
         <label class="casilla compromiso"><input type="checkbox" name="compromiso" required>
           <span>Recibo ${varios ? 'los equipos completos' : 'el equipo completo'} y me comprometo a cuidar${varios ? 'los' : 'lo'} y devolver${varios ? 'los' : 'lo'} a tiempo.</span></label>
       </fieldset>
@@ -492,10 +499,15 @@ function vistaSalida() {
     ir('./');
   });
 
+  form.tipo_usuario.addEventListener('change', () => {
+    document.getElementById('bloque-avalista').hidden = form.tipo_usuario.value !== EXTERNO;
+  });
+
   form.addEventListener('submit', ev => {
     ev.preventDefault();
     if (form.nombre && form.nombre.value.trim().length < 3) return aviso(form, 'Escriba su nombre completo.');
     if (form.tipo_usuario && !form.tipo_usuario.value) return aviso(form, 'Seleccione su vinculación con la universidad.');
+    if (form.tipo_usuario.value === EXTERNO && !/@/.test(form.avalista_email.value)) return aviso(form, 'Escriba el correo institucional de su avalista.');
     if (form.acepta_datos && !form.acepta_datos.checked) return aviso(form, 'Debe autorizar el tratamiento de datos para registrar el préstamo.');
     if (!form.proposito.value) return aviso(form, 'Seleccione para qué va a usar los equipos.');
     if (form.descripcion.value.trim().length < 3) return aviso(form, 'Escriba en pocas palabras la actividad.');
@@ -508,10 +520,10 @@ function vistaSalida() {
       proposito: form.proposito.value,
       descripcion: form.descripcion.value,
       lugar_uso: form.lugar_uso.value,
-      tipo_usuario: externo ? 'Externo' : form.tipo_usuario.value,
+      tipo_usuario: form.tipo_usuario.value,
       fecha_devolucion: v,
       fecha_prevista: finDelDia(v).toISOString(),
-      avalista_email: form.avalista_email?.value || ''
+      avalista_email: form.tipo_usuario.value === EXTERNO ? form.avalista_email.value : ''
     };
     if (form.nombre) datos.perfil = { nombre: form.nombre.value, tipo: datos.tipo_usuario, acepta_datos: form.acepta_datos.checked };
     enviar(form, 'prestar', datos, r => {

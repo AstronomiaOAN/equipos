@@ -184,7 +184,7 @@ test('devolución parcial y permisos', () => {
 test('usuario externo necesita avalista, pero no aprobación', () => {
   const e = preparar();
   const ext = e.iniciarSesion('visitante@gmail.com');
-  const perfil = { nombre: 'Visitante Externo', tipo: 'Externo', acepta_datos: true };
+  const perfil = { nombre: 'Visitante Externo', tipo: 'Externo a la UNAL', acepta_datos: true };
   assert.equal(prestar(e, ext.token, ['OAN-TEL-0001'], { perfil }).ok, false);
   const r = prestar(e, ext.token, ['OAN-TEL-0001'], { perfil, avalista_email: 'profe@unal.edu.co' });
   assert.equal(r.ok, true, r.error);
@@ -303,5 +303,11 @@ test('cada préstamo registra vinculación, tipo de actividad y lugar de uso', (
   assert.equal(r.prestamo.tipo_usuario, 'Estudiante de posgrado');
   assert.equal(e.leer('Usuarios')[0].tipo, 'Estudiante de posgrado');
   assert.ok(e.correos.some(c => c.to === 'tecnico@unal.edu.co' && c.htmlBody.includes('En el campus de la UNAL')));
-  assert.equal(e.llamar({ accion: 'prestar', token, equipos: ['OAN-MON-0001'], ...SOLICITUD, tipo_usuario: 'Externo', fecha_devolucion: dia(1) }).ok, false);
+  assert.equal(e.llamar({ accion: 'prestar', token, equipos: ['OAN-MON-0001'], ...SOLICITUD, tipo_usuario: 'Investigador', fecha_devolucion: dia(1) }).ok, false);
+  // Con correo de la UNAL también puede declararse externo, y entonces necesita avalista
+  assert.equal(e.llamar({ accion: 'prestar', token, equipos: ['OAN-MON-0001'], ...SOLICITUD, tipo_usuario: 'Externo a la UNAL', fecha_devolucion: dia(1) }).ok, false);
+  const x = e.llamar({ accion: 'prestar', token, equipos: ['OAN-MON-0001'], ...SOLICITUD, tipo_usuario: 'Externo a la UNAL',
+    avalista_email: 'profe@unal.edu.co', fecha_devolucion: dia(1) });
+  assert.equal(x.ok, true, x.error);
+  assert.equal(x.prestamo.tipo_usuario, 'Externo a la UNAL');
 });

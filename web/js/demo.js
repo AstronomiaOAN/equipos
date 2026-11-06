@@ -2,6 +2,8 @@
 // Sirve para probar la web y capacitar al personal antes de conectar la hoja de cálculo.
 import { CATALOGOS, EQUIPOS_DEMO, LABORATORIOS_DEMO, DIAS_MAX_PRESTAMO } from './catalogos.js';
 
+const EXTERNO = 'Externo a la UNAL';
+
 const CLAVE = 'oan-equipos-demo-v4';
 const ABIERTOS = ['activo'];
 
@@ -61,7 +63,7 @@ function gestiona(db, email, usuario) {
 
 function usuarioPublico(db, email, u) {
   return {
-    email, registrado: !!u, interno: interno(email), nombre: u?.nombre || '', tipo: u?.tipo || (interno(email) ? '' : 'Externo'),
+    email, registrado: !!u, interno: interno(email), nombre: u?.nombre || '', tipo: u?.tipo || (interno(email) ? '' : EXTERNO),
     dependencia: u?.dependencia || '', telefono: u?.telefono || '', rol: u?.rol || 'usuario', gestiona: gestiona(db, email, u)
   };
 }
@@ -91,8 +93,8 @@ function pub(db, p) {
 function guardarPerfil(db, email, perfil) {
   const nombre = texto(perfil.nombre, 120);
   if (nombre.length < 3) throw new ErrorDemo('Escriba su nombre completo.');
-  const tipo = interno(email) ? perfil.tipo : 'Externo';
-  if (!CATALOGOS.tipos_usuario.includes(tipo) || (interno(email) && tipo === 'Externo')) throw new ErrorDemo('Seleccione el tipo de usuario.');
+  const tipo = interno(email) ? perfil.tipo : EXTERNO;
+  if (!CATALOGOS.tipos_usuario.includes(tipo)) throw new ErrorDemo('Seleccione el tipo de usuario.');
   let u = db.usuarios.find(x => x.email === email);
   if (!u && perfil.acepta_datos !== true) throw new ErrorDemo('Debe aceptar la política de tratamiento de datos personales.');
   const datos = { nombre, tipo };
@@ -180,10 +182,8 @@ const ACCIONES = {
     const eqs = ids(d.equipos || d.equipo_id).map(id => equipo(db, id));
     const ocupados = eqs.filter(e => e.estado !== 'disponible');
     if (ocupados.length) throw new ErrorDemo(`No están disponibles: ${ocupados.map(e => `${e.id} (${e.estado})`).join(', ')}. Quítelos de la lista.`, 409);
-    if (d.tipo_usuario && usuario.tipo !== 'Externo' && d.tipo_usuario !== usuario.tipo) {
-      if (d.tipo_usuario === 'Externo' || !CATALOGOS.tipos_usuario.includes(d.tipo_usuario)) throw new ErrorDemo('Seleccione su vinculación con la universidad.');
-      usuario.tipo = d.tipo_usuario;
-    }
+    if (!interno(s.email)) usuario.tipo = EXTERNO;
+    else if (d.tipo_usuario) usuario.tipo = enLista(d.tipo_usuario, CATALOGOS.tipos_usuario, 'su vinculación con la universidad');
     const proposito = enLista(d.proposito, CATALOGOS.propositos, 'el tipo de actividad');
     const lugar = enLista(d.lugar_uso, CATALOGOS.lugares, 'dónde se usarán los equipos');
     const descripcion = texto(d.descripcion, 300);
@@ -194,7 +194,7 @@ const ACCIONES = {
     const dias = Math.round((Date.parse(diaDev) - Date.parse(hoy)) / 864e5);
     if (dias < 0) throw new ErrorDemo('El día de devolución no puede ser anterior a hoy.');
     if (dias > DIAS_MAX_PRESTAMO) throw new ErrorDemo(`El préstamo puede durar máximo ${DIAS_MAX_PRESTAMO} días calendario.`);
-    const externo = usuario.tipo === 'Externo';
+    const externo = usuario.tipo === EXTERNO || usuario.tipo === 'Externo';
     const avalista = externo ? normal(d.avalista_email) : '';
     if (externo && !interno(avalista)) throw new ErrorDemo('Los usuarios externos necesitan un avalista con correo institucional.');
     const ahora = new Date().toISOString();
