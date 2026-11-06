@@ -677,8 +677,7 @@ function configurar() {
 function cargarDatosIniciales_(libro) {
   const vacia = nombre => libro.getSheetByName(nombre).getLastRow() <= 1;
   const admin = CONFIG.CORREOS_INTERNOS[0];
-  const sinEjemplos = PropertiesService.getScriptProperties().getProperty('SIN_EJEMPLOS') === '1';
-  if (!sinEjemplos && (vacia('Laboratorios') || vacia('Equipos'))) cargarEjemplos_(admin);
+  if (vacia('Laboratorios') || vacia('Equipos')) cargarEjemplos_(admin);
   if (vacia('Usuarios') && admin) {
     agregar_('Usuarios', { email: admin, nombre: 'Observatorio Astronómico Nacional', tipo: 'Personal técnico o administrativo',
       rol: 'admin', activo: 'SÍ', acepta_datos: new Date(), fecha_registro: new Date() });
@@ -1108,19 +1107,19 @@ function cerrarTodasLasSesiones() {
 }
 
 /**
- * Empieza de cero: vuelve a crear todas las pestañas vacías (solo encabezados), sin equipos
- * ni laboratorios de ejemplo. Solo queda la cuenta del OAN como administradora, para que
- * pueda entrar al panel. Cierra todas las sesiones. Pide confirmación. No cambia la URL.
+ * Empieza de cero con los registros: vacía Prestamos, Usuarios, Incidencias y Bitacora y deja
+ * todos los equipos disponibles (salvo los dados de baja). Conserva Equipos y Laboratorios.
+ * Solo queda la cuenta del OAN como administradora. Cierra todas las sesiones. No cambia la URL.
  */
 function borrarTodosLosDatos() {
   const ui = SpreadsheetApp.getUi();
   const r = ui.alert('Borrar todos los datos',
-    'Se borrarán TODOS los datos: equipos, laboratorios, préstamos, usuarios, novedades y bitácora. ' +
-    'Las pestañas quedarán vacías, listas para empezar de cero. Esto no se puede deshacer.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
+    'Se borrarán TODOS los préstamos, usuarios, novedades y la bitácora. Se conservan los equipos y ' +
+    'los laboratorios, y todos los equipos quedarán disponibles. Esto no se puede deshacer.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
   reiniciarBase_();
-  ui.alert('Listo. Las pestañas quedaron vacías. Agregue sus laboratorios y equipos en las pestañas ' +
-    'Laboratorios y Equipos. Todas las personas deberán iniciar sesión otra vez.');
+  ui.alert('Listo. Se borraron los registros y se conservaron los equipos. ' +
+    'Todas las personas deberán iniciar sesión otra vez.');
 }
 
 function reiniciarBase_() {
@@ -1129,13 +1128,15 @@ function reiniciarBase_() {
   try {
     const libro = SpreadsheetApp.getActive();
     if (!libro.getSheetByName('Instrucciones')) libro.insertSheet('Instrucciones', 0);
-    Object.keys(HOJAS).forEach(nombre => {
+    ['Prestamos', 'Usuarios', 'Incidencias', 'Bitacora'].forEach(nombre => {
       const h = libro.getSheetByName(nombre);
       if (h) libro.deleteSheet(h);
     });
     cerrarTodasLasSesiones();
-    PropertiesService.getScriptProperties().setProperty('SIN_EJEMPLOS', '1');
     configurar();
+    leer_('Equipos').forEach(eq => {
+      if (eq.estado !== 'disponible' && eq.estado !== 'baja') actualizar_('Equipos', eq, { estado: 'disponible' });
+    });
   } finally {
     candado.releaseLock();
   }

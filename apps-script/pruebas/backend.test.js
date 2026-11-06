@@ -312,7 +312,7 @@ test('cada préstamo registra vinculación, tipo de actividad y lugar de uso', (
   assert.equal(x.prestamo.tipo_usuario, 'Externo a la UNAL');
 });
 
-test('reiniciar la base deja todas las pestañas vacías', () => {
+test('reiniciar la base borra los registros y conserva los equipos', () => {
   const e = crearEntorno();
   e.api.configurar();
   const { token } = e.iniciarSesion('ana@unal.edu.co');
@@ -324,10 +324,9 @@ test('reiniciar la base deja todas las pestañas vacías', () => {
   assert.equal(e.leer('Prestamos').length, 0);
   assert.equal(e.leer('Bitacora').length, 0);
   assert.deepEqual(e.leer('Usuarios').map(u => u.email), ['oan.unal@gmail.com']);
-  assert.equal(e.leer('Equipos').length, 0);
-  assert.equal(e.leer('Laboratorios').length, 0);
   assert.equal(e.leer('Incidencias').length, 0);
+  assert.equal(e.leer('Equipos').length, 20);
+  assert.equal(e.leer('Laboratorios').length, 3);
+  assert.ok(e.leer('Equipos').every(x => x.estado === 'disponible'));
   assert.equal(e.llamar({ accion: 'misPrestamos', token }).ok, false);
-  e.api.configurar();   // volver a configurar no trae de vuelta los ejemplos
-  assert.equal(e.leer('Equipos').length, 0);
 });
