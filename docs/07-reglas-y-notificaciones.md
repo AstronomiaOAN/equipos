@@ -4,36 +4,43 @@
 
 | Regla | Dónde se cambia |
 | --- | --- |
+| El préstamo y la devolución **quedan registrados de inmediato**, sin aprobación ni verificación; el laboratorio recibe el aviso | — |
 | Solo se presta un equipo en estado `disponible` | — |
-| La devolución prevista debe ser futura y no superar `max_dias` del equipo (7 si está vacío). En una salida de varios equipos manda el plazo más corto | Columna `max_dias` de `Equipos` |
+| El día de devolución va de hoy a **7 días calendario** después; vence a las 11:59 p. m. de ese día | `DIAS_MAX_PRESTAMO` en `Code.gs` y en `web/js/catalogos.js` |
 | Una salida tiene máximo 30 equipos; si alguno no está disponible no se registra ninguno y se indica cuál quitar | `MAX_EQUIPOS_POR_SALIDA` |
-| Requieren aprobación: equipos `restringido`, usuarios externos y préstamos para uso fuera del campus | `APROBAR_FUERA_DEL_CAMPUS` en `Code.gs` |
-| Los usuarios externos deben indicar un avalista con correo institucional, que recibe copia de los avisos de vencimiento | `DOMINIOS_INTERNOS`, `PERMITIR_EXTERNOS` |
+| Los usuarios externos (correo no institucional) indican un **avalista** con correo institucional, que recibe copia de los avisos | `DOMINIOS_INTERNOS`, `PERMITIR_EXTERNOS` |
 | La primera vez hay que aceptar la política de tratamiento de datos | — |
 | Solo quien tiene el préstamo o un responsable del laboratorio puede registrar la devolución | — |
-| Devolver «Dañado», «Incompleto» o con componentes faltantes exige describir el problema y crea un reporte | — |
-| Las devoluciones de equipos `supervisado` o `restringido`, o con novedades, quedan `por_verificar` hasta que el responsable revisa | — |
-| Si el propio responsable registra la devolución, queda verificada en el acto | — |
+| Devolver «Dañado» o «Incompleto» exige describir el problema, deja el equipo en `mantenimiento` y abre una novedad | — |
 | Un usuario con `activo = NO` en `Usuarios` no puede iniciar sesión | Hoja `Usuarios` |
+
+## Qué se le pide a la persona
+
+| Cuándo | Datos |
+| --- | --- |
+| Solo la primera vez | Nombre completo, vinculación con la universidad (estudiante, docente, investigador, personal), autorización de datos |
+| En cada préstamo | Para qué (lista), la actividad en pocas palabras y el día de devolución; avalista solo si es externo |
+| En cada devolución | El estado de cada equipo (Bueno por defecto); la descripción solo si está dañado o incompleto |
+
+No hay campos opcionales.
 
 ## Notificaciones por correo
 
 | Cuándo | A quién | Contenido |
 | --- | --- | --- |
 | Inicio de sesión | Usuario | Código de 6 dígitos, válido 10 minutos |
-| Préstamo directo | Usuario | Comprobante con la lista de equipos de la salida, propósito y devolución prevista (uno solo por salida) |
-| Préstamo de equipo supervisado | Responsables del laboratorio | Aviso de salida con los datos del préstamo |
-| Solicitud que requiere aprobación | Responsables (y avalista, si es externo) | Datos de la solicitud y enlace al panel |
-| Solicitud recibida | Usuario | Confirmación de que quedó pendiente |
-| Aprobación o rechazo | Usuario | Resultado y motivo del rechazo |
-| Devolución | Usuario | Comprobante de devolución |
-| Devolución por verificar o con novedad | Responsables | Datos y enlace al panel |
+| Préstamo | **Responsables del laboratorio** (y avalista, si es externo) | Quién, para qué, lista de equipos y día de devolución |
+| Préstamo | Usuario | Comprobante (uno por salida) |
+| Devolución | **Responsables del laboratorio** | Lista de equipos y su estado; resaltado si hay daño o faltante |
+| Devolución | Usuario | Comprobante |
 | Reporte de daño o falla | Responsables | Tipo, descripción y quién reporta |
-| 24 horas antes del vencimiento | Usuario | Recordatorio (una sola vez) |
+| Mañana del día de devolución | Usuario | Recordatorio (una sola vez) |
 | Préstamo vencido (cada día a las 7 a. m.) | Usuario y avalista | Aviso de vencimiento |
 | Préstamos vencidos (cada día a las 7 a. m.) | Responsables | Resumen por laboratorio |
 
-Los correos salen de **oan.unal@gmail.com**, la cuenta dueña del Apps Script. Una cuenta @gmail.com puede enviar **unos 100 correos al día**. Para no agotarlos, el sistema manda **un solo correo por salida** (no uno por equipo) y agrupa los avisos de vencimiento por persona. El menú *Préstamos OAN → Ver correos disponibles hoy* muestra cuántos quedan. Si se agotan, se puede poner `CORREO_COMPROBANTES: false` (la web ya muestra el comprobante en pantalla) y se mantienen los códigos de acceso y los avisos al laboratorio. Si falla un correo, el préstamo igual queda registrado.
+Si una salida tiene equipos de varios laboratorios, cada laboratorio recibe un aviso con sus equipos.
+
+Los correos salen de **oan.unal@gmail.com**, que puede enviar **unos 100 correos al día**. Un préstamo con su devolución usa unos 4 correos (aviso y comprobante en cada paso), así que alcanza para unos 20 préstamos diarios además de los códigos de acceso. El menú *Préstamos OAN → Ver correos disponibles hoy* muestra cuántos quedan. Si no alcanzan, se puede poner `CORREO_COMPROBANTES: false` (la web ya muestra el comprobante en pantalla) o mover el sistema a una cuenta institucional de Google Workspace (unos 1.500 al día). Si falla un correo, el préstamo igual queda registrado.
 
 ## Parámetros
 
@@ -41,17 +48,17 @@ Todos están al inicio de [`apps-script/Code.gs`](../apps-script/Code.gs), en `C
 
 | Parámetro | Valor inicial |
 | --- | --- |
+| `DIAS_MAX_PRESTAMO` | 7 días calendario |
+| `AVISAR_RESPONSABLES` | `true` (aviso al laboratorio en cada préstamo y devolución) |
+| `CORREO_COMPROBANTES` | `true` (comprobante por correo al usuario) |
 | `DOMINIOS_INTERNOS` | `unal.edu.co` |
 | `CORREOS_INTERNOS` | `oan.unal@gmail.com` (cuentas del OAN fuera del dominio institucional) |
-| `MAX_EQUIPOS_POR_SALIDA` | 30 |
-| `CORREO_COMPROBANTES` | `true` |
 | `PERMITIR_EXTERNOS` | `true` |
-| `APROBAR_FUERA_DEL_CAMPUS` | `true` |
+| `MAX_EQUIPOS_POR_SALIDA` | 30 |
 | `DIAS_TOKEN` (duración de la sesión) | 30 días |
 | `MINUTOS_CODIGO` | 10 |
 | `MAX_INTENTOS_CODIGO` | 5 |
 | `HORAS_RECORDATORIO` | 24 |
-| `MAX_DIAS_POR_DEFECTO` | 7 |
-| `CORREO_COPIA_ALERTAS` | vacío (opcional: un buzón del OAN que reciba copia de todas las alertas) |
+| `CORREO_COPIA_ALERTAS` | vacío (opcional: un buzón del OAN que reciba copia de todos los avisos) |
 
-Las listas de propósitos, lugares, tipos de usuario, condiciones y tipos de daño están en `CATALOGOS`. Si se cambian, hay que cambiarlas también en [`web/js/catalogos.js`](../web/js/catalogos.js) para el modo demostración (con el servidor conectado, la web usa las del servidor).
+Las listas de propósitos, tipos de usuario, condiciones y tipos de daño están en `CATALOGOS`. Si se cambian, hay que cambiarlas también en [`web/js/catalogos.js`](../web/js/catalogos.js) para el modo demostración (con el servidor conectado, la web usa las del servidor).

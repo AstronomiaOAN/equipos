@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { llamar, MODO_DEMO } from './api.js';
 import { reiniciarDemo } from './demo.js';
 import { abrirEscaner, camaraDisponible, codigoDe } from './escaner.js';
-import { CATALOGOS as CATALOGOS_LOCALES, NIVELES, ESTADOS_EQUIPO, ESTADOS_PRESTAMO, EQUIPOS_DEMO } from './catalogos.js';
+import { CATALOGOS as CATALOGOS_LOCALES, ESTADOS_EQUIPO, ESTADOS_PRESTAMO, EQUIPOS_DEMO, DIAS_MAX_PRESTAMO } from './catalogos.js';
 
 // ─── Estado y utilidades ────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ const salida = {
   guardar(lista) { lista.length ? almacen.escribir('oan-salida', lista) : this.vaciar(); },
   agregar(eq) {
     const lista = this.equipos().filter(x => x.id !== eq.id);
-    lista.push({ id: eq.id, nombre: eq.nombre, max_dias: eq.max_dias, nivel_control: eq.nivel_control, componentes: eq.componentes || [], laboratorio: eq.laboratorio, foto: eq.foto || '' });
+    lista.push({ id: eq.id, nombre: eq.nombre, componentes: eq.componentes || [], laboratorio: eq.laboratorio, foto: eq.foto || '' });
     this.guardar(lista);
   },
   quitar(id) { this.guardar(this.equipos().filter(x => x.id !== id)); },
@@ -68,6 +68,14 @@ const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 const formatoFecha = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
 const fecha = v => v ? formatoFecha.format(new Date(v)) : '—';
+
+// Plazos en días calendario (hora de Colombia): el préstamo vence al final del día elegido.
+const formatoDia = new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' });
+const dia = v => v ? formatoDia.format(new Date(v)) : '—';
+const formatoDiaCorto = new Intl.DateTimeFormat('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Bogota' });
+const hoyBogota = () => new Date(Date.now() - 5 * 36e5).toISOString().slice(0, 10);
+const sumarDias = (ymd, n) => new Date(Date.parse(ymd + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const finDelDia = ymd => new Date(ymd + 'T23:59:00-05:00');
 
 /** Valor para un <input type="datetime-local"> en la hora del dispositivo. */
 function valorLocal(d) {
@@ -252,9 +260,10 @@ async function vistaEquipo(id) {
       <p><a class="boton secundario" href="./">Buscar otro código</a></p>`);
     return;
   }
-  if (r.catalogos) catalogos = r.catalogos;
+  if (r.catalogos) catalogos = { ...CATALOGOS_LOCALES, ...r.catalogos };
   const { equipo: eq, prestamo: p, puede_gestionar: gestor } = r;
   const enSalida = salida.equipos();
+  const diasMax = eq.dias_max || DIAS_MAX_PRESTAMO;
 
   let accion = '';
   if (eq.estado === 'disponible') {
@@ -268,13 +277,8 @@ async function vistaEquipo(id) {
       accion = `<button class="principal" id="b-prestar">Prestar este equipo</button>
         <p class="ayuda">¿Necesita varios equipos para la misma actividad? Después de este podrá agregar los demás.</p>`;
     }
-  } else if (eq.estado === 'reservado' && p) {
-    accion = p.es_mio
-      ? `<div class="aviso-estado"><p>Su solicitud espera la aprobación del responsable del laboratorio. Le llegará un correo con la respuesta.</p></div>
-         <button class="secundario" id="b-cancelar">Cancelar mi solicitud</button>`
-      : gestor ? bloqueAprobacion(p) : `<p class="aviso-estado">Hay una solicitud de préstamo en trámite para este equipo.</p>`;
   } else if (eq.estado === 'prestado' && p) {
-    const plazo = `${p.vencido ? 'Debía devolverse' : 'Se devuelve'} el <strong>${fecha(p.fecha_prevista)}</strong>`;
+    const plazo = `${p.vencido ? 'Debía devolverse el' : 'Se devuelve a más tardar el'} <strong>${dia(p.fecha_prevista)}</strong>`;
     const varios = p.es_mio && p.activos_en_salida > 1;
     accion = p.es_mio || gestor
       ? `${gestor && !p.es_mio ? datosSolicitante(p) : ''}
@@ -282,8 +286,6 @@ async function vistaEquipo(id) {
          <button class="principal" id="b-devolver">${p.es_mio ? 'Devolver este equipo' : 'Registrar la devolución'}</button>
          ${varios ? `<button class="secundario ancho" id="b-devolver-todo">Devolver los ${p.activos_en_salida} equipos de esta salida</button>` : ''}`
       : `<p class="aviso-estado ${p.vencido ? 'vencido' : ''}">${plazo}.</p>`;
-  } else if (eq.estado === 'en_revision') {
-    accion = gestor && p ? bloqueVerificacion(p) : `<p class="aviso-estado">El equipo fue devuelto y el laboratorio lo está revisando.</p>`;
   } else {
     accion = `<p class="aviso-estado">Este equipo no se puede prestar en este momento (${esc(ESTADOS_EQUIPO[eq.estado] || eq.estado).toLowerCase()}).</p>`;
   }
@@ -302,7 +304,7 @@ async function vistaEquipo(id) {
       <dl class="ficha">
         <div><dt>Laboratorio</dt><dd>${esc(eq.laboratorio)}${eq.ubicacion ? `<br><span class="tenue">${esc(eq.ubicacion)}</span>` : ''}</dd></div>
         ${eq.marca || eq.modelo ? `<div><dt>Modelo</dt><dd>${esc([eq.marca, eq.modelo].filter(Boolean).join(' '))}</dd></div>` : ''}
-        <div><dt>Préstamo</dt><dd>${esc(NIVELES[eq.nivel_control] || eq.nivel_control)}. Máximo ${esc(eq.max_dias)} día${eq.max_dias == 1 ? '' : 's'}.</dd></div>
+        <div><dt>Plazo</dt><dd>Hasta ${diasMax} días calendario.</dd></div>
         ${eq.componentes?.length ? `<div><dt>Incluye</dt><dd><ul class="componentes">${eq.componentes.map(c => `<li>${esc(c)}</li>`).join('')}</ul></dd></div>` : ''}
         ${eq.notas ? `<div><dt>Notas</dt><dd>${esc(eq.notas)}</dd></div>` : ''}
       </dl>
@@ -318,76 +320,15 @@ async function vistaEquipo(id) {
   document.getElementById('b-devolver')?.addEventListener('click', requiereSesion(() => formularioDevolucion([{ ...p, equipo_id: eq.id, equipo_nombre: eq.nombre }])));
   document.getElementById('b-devolver-todo')?.addEventListener('click', requiereSesion(() => devolverSalida(p.lote_id)));
   document.getElementById('b-reportar').addEventListener('click', requiereSesion(() => formularioReporte(eq)));
-  document.getElementById('b-cancelar')?.addEventListener('click', async ev => {
-    if (!confirm('¿Cancelar la solicitud de préstamo de este equipo?')) return;
-    ev.target.disabled = true;
-    const c = await llamar('cancelar', { token: sesion.token, prestamo_id: p.id });
-    if (!c.ok) alert(c.error);
-    vistaEquipo(eq.id);
-  });
-  conectarGestion(raiz, () => vistaEquipo(eq.id));
 }
 
 function datosSolicitante(p) {
   return `<dl class="ficha solicitante">
     <div><dt>Responsable</dt><dd>${esc(p.nombre)}<br><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></dd></div>
-    <div><dt>Propósito</dt><dd>${esc(p.proposito)}${p.curso_proyecto ? ` · ${esc(p.curso_proyecto)}` : ''}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
-    <div><dt>Lugar de uso</dt><dd>${esc(p.lugar_uso)}</dd></div>
+    <div><dt>Para qué</dt><dd>${esc(p.proposito)}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
     ${p.avalista_email ? `<div><dt>Avalista</dt><dd>${esc(p.avalista_email)}</dd></div>` : ''}
-    <div><dt>Plazo</dt><dd>${p.fecha_salida ? `Salió el ${fecha(p.fecha_salida)}<br>` : `Solicitado el ${fecha(p.fecha_solicitud)}<br>`}Devolución: ${fecha(p.fecha_prevista)}</dd></div>
+    <div><dt>Plazo</dt><dd>Salió el ${fecha(p.fecha_salida)}<br>Devolver a más tardar el ${dia(p.fecha_prevista)}</dd></div>
   </dl>`;
-}
-
-function bloqueAprobacion(p) {
-  return `<section class="gestion-item" data-lote="${esc(p.lote_id)}">
-    <h3>Solicitud por aprobar</h3>
-    ${datosSolicitante(p)}
-    <p class="ayuda">Al aprobar se entregan todos los equipos pendientes de esta solicitud.</p>
-    <div class="acciones">
-      <button class="principal" data-accion="aprobar">Aprobar y entregar</button>
-      <button class="secundario" data-accion="rechazar">Rechazar</button>
-    </div>
-  </section>`;
-}
-
-function bloqueVerificacion(p) {
-  return `<section class="gestion-item" data-prestamo="${esc(p.id)}">
-    <h3>Devolución por verificar</h3>
-    ${datosSolicitante(p)}
-    <p>Estado reportado: <strong>${esc(p.condicion_devolucion)}</strong>${p.obs_devolucion ? ` — ${esc(p.obs_devolucion)}` : ''}</p>
-    <div class="acciones">
-      <button class="principal" data-accion="verificar">Revisado: queda disponible</button>
-      <button class="secundario" data-accion="mantenimiento">Enviar a mantenimiento</button>
-    </div>
-  </section>`;
-}
-
-/** Botones de aprobar, rechazar y verificar; actúan sobre un préstamo o sobre toda una salida. */
-function conectarGestion(contenedor, despues) {
-  contenedor.querySelectorAll('[data-accion]').forEach(boton => {
-    boton.addEventListener('click', async () => {
-      const caja = boton.closest('[data-prestamo], [data-lote]');
-      const objetivo = caja.dataset.lote ? { lote_id: caja.dataset.lote } : { prestamo_id: caja.dataset.prestamo };
-      const accion = boton.dataset.accion;
-      const datos = { token: sesion.token, ...objetivo };
-      let nombre = 'aprobar';
-      if (accion === 'aprobar') datos.aprobar = true;
-      if (accion === 'rechazar') {
-        const motivo = prompt('Motivo del rechazo (le llegará a quien lo solicitó):');
-        if (!motivo) return;
-        Object.assign(datos, { aprobar: false, motivo });
-      }
-      if (accion === 'verificar' || accion === 'mantenimiento') {
-        nombre = 'verificar';
-        datos.enviar_mantenimiento = accion === 'mantenimiento';
-      }
-      boton.disabled = true;
-      const r = await llamar(nombre, datos);
-      if (!r.ok) alert(r.error);
-      cacheCatalogo = null;
-      despues();
-    });
-  });
 }
 
 // ─── Salida: varios equipos para una misma actividad ────────────────────────
@@ -427,19 +368,19 @@ function vistaSalida() {
   if (!sesion) return pedirSesion('?vista=salida');
   const equipos = salida.equipos();
   if (!equipos.length) {
-    return mostrar(`<h1>Mi salida</h1>
-      <p class="entrada">No hay equipos en la lista. Escanee el QR del primer equipo que va a sacar.</p>
+    mostrar(`<h1>Mi salida</h1>
+      <p class="entrada">No hay equipos en la lista. Escanee el QR del primer equipo que va a sacar o elíjalo en el catálogo.</p>
       <div class="acciones">${camaraDisponible() ? '<button class="principal" id="b-escanear">Escanear QR</button>' : ''}
-      <a class="boton secundario" href="./">Escribir un código</a></div>`)
-      || document.getElementById('b-escanear')?.addEventListener('click', escanearYVolver);
+      <a class="boton secundario" href="?vista=catalogo">Ver los equipos</a></div>`);
+    document.getElementById('b-escanear')?.addEventListener('click', escanearYVolver);
+    return;
   }
   const u = sesion.usuario || {};
   const externo = !u.interno;
-  const ahora = new Date();
-  const maxDias = Math.min(...equipos.map(e => Number(e.max_dias) || 7));
-  const maximo = new Date(ahora.getTime() + maxDias * 864e5);
-  const sugerida = new Date(Math.min(ahora.getTime() + 864e5, maximo.getTime()));
-  const conAprobacion = equipos.filter(e => e.nivel_control === 'restringido');
+  const varios = equipos.length > 1;
+  const hoy = hoyBogota();
+  const maximo = sumarDias(hoy, DIAS_MAX_PRESTAMO);
+  const atajos = [['Hoy', 0], ['Mañana', 1], ['En 3 días', 3], ['En una semana', DIAS_MAX_PRESTAMO]];
 
   const perfil = u.registrado ? '' : `
     <fieldset>
@@ -451,24 +392,19 @@ function vistaSalida() {
         ? '<input type="hidden" name="tipo" value="Externo">'
         : `<label for="tipo">Vinculación con la universidad</label>
            <select id="tipo" name="tipo" required><option value="">Seleccione…</option>${opciones(catalogos.tipos_usuario.filter(t => t !== 'Externo'))}</select>`}
-      <label for="dependencia">${externo ? 'Institución' : 'Programa, grupo o dependencia'}</label>
-      <input id="dependencia" name="dependencia" autocomplete="organization">
-      <label for="telefono">Celular <span class="opcional">(opcional)</span></label>
-      <input id="telefono" name="telefono" type="tel" inputmode="tel" autocomplete="tel">
       <label class="casilla"><input type="checkbox" name="acepta_datos" required>
         <span>Autorizo el tratamiento de mis datos personales para gestionar el préstamo, según la <a href="${esc(CONFIG.URL_POLITICA_DATOS)}" target="_blank" rel="noopener">política de datos</a> (Ley 1581 de 2012).</span></label>
     </fieldset>`;
 
   mostrar(`
-    <h1>${equipos.length > 1 ? `Préstamo de ${equipos.length} equipos` : `Prestar ${esc(equipos[0].nombre)}`}</h1>
-    <p class="entrada">Los datos de la actividad se escriben una sola vez para todos los equipos.</p>
+    <h1>${varios ? `Préstamo de ${equipos.length} equipos` : `Prestar ${esc(equipos[0].nombre)}`}</h1>
     <form id="f-prestamo" novalidate>
       <fieldset>
         <legend>Equipos</legend>
         <ul class="lista-salida">
           ${equipos.map(e => `<li>
             <span class="miniatura">${fotoDe(e)}</span>
-            <span class="lista-salida-texto"><strong>${esc(e.nombre)}</strong><br><span class="tenue">${esc(e.id)}${e.nivel_control === 'restringido' ? ' · requiere aprobación' : ''}</span></span>
+            <span class="lista-salida-texto"><strong>${esc(e.nombre)}</strong><br><span class="tenue">${esc(e.id)}</span></span>
             <button type="button" class="quitar" data-quitar="${esc(e.id)}" aria-label="Quitar ${esc(e.nombre)}">Quitar</button>
           </li>`).join('')}
         </ul>
@@ -484,53 +420,48 @@ function vistaSalida() {
       </fieldset>
       ${perfil}
       <fieldset>
-        <legend>Actividad</legend>
-        <label for="proposito">¿Para qué ${equipos.length > 1 ? 'los' : 'lo'} va a usar?</label>
+        <legend>Préstamo</legend>
+        <label for="proposito">¿Para qué ${varios ? 'los' : 'lo'} va a usar?</label>
         <select id="proposito" name="proposito" required><option value="">Seleccione…</option>${opciones(catalogos.propositos)}</select>
-        <label for="descripcion">Describa la actividad</label>
-        <textarea id="descripcion" name="descripcion" rows="2" maxlength="500" placeholder="Ej.: noche de observación pública del cúmulo de las Pléyades" required></textarea>
-        <label for="curso">Curso, proyecto o evento <span class="opcional">(opcional)</span></label>
-        <input id="curso" name="curso_proyecto" maxlength="150">
-        <label for="lugar">¿Dónde ${equipos.length > 1 ? 'los' : 'lo'} va a usar?</label>
-        <select id="lugar" name="lugar_uso" required>${opciones(catalogos.lugares, 'Dentro del OAN')}</select>
-        <label for="prevista">Devolución prevista</label>
-        <input id="prevista" name="fecha_prevista" type="datetime-local" min="${valorLocal(ahora)}" max="${valorLocal(maximo)}" value="${valorLocal(sugerida)}" required>
-        <p class="ayuda">Máximo ${plural(maxDias, 'día', 'días')} (hasta el ${fecha(maximo)})${equipos.length > 1 ? ', según el equipo de plazo más corto' : ''}</p>
+        <label for="descripcion">Actividad</label>
+        <input id="descripcion" name="descripcion" maxlength="300" placeholder="Ej.: observación pública de la Luna" required>
+        <label for="devolucion">Día de devolución</label>
+        <div class="atajos" role="group" aria-label="Elegir rápido el día de devolución">
+          ${atajos.map(([t, n]) => `<button type="button" class="chip" data-dias="${n}">${t}</button>`).join('')}
+        </div>
+        <input id="devolucion" name="fecha_devolucion" type="date" min="${hoy}" max="${maximo}" value="${sumarDias(hoy, 1)}" required>
+        <p class="ayuda" id="ayuda-devolucion"></p>
         ${externo ? `<label for="avalista">Correo institucional de su avalista</label>
           <input id="avalista" name="avalista_email" type="email" inputmode="email" placeholder="docente@unal.edu.co" required>
-          <p class="ayuda">Docente o funcionario que responde por el préstamo.</p>` : ''}
-      </fieldset>
-      <fieldset>
-        <legend>Estado al recibir${equipos.length > 1 ? 'los' : 'lo'}</legend>
-        <label class="casilla"><input type="radio" name="estado_salida" value="Bueno" checked><span>${equipos.length > 1 ? 'Están completos y en buen estado' : 'Está completo y en buen estado'}</span></label>
-        <label class="casilla"><input type="radio" name="estado_salida" value="obs"><span>Hay observaciones</span></label>
-        <textarea name="obs_salida" rows="2" maxlength="300" placeholder="Indique el equipo y la novedad: rayones, piezas faltantes…" hidden></textarea>
+          <p class="ayuda">Docente o funcionario de la universidad que responde por el préstamo.</p>` : ''}
         <label class="casilla compromiso"><input type="checkbox" name="compromiso" required>
-          <span>Recibo ${equipos.length > 1 ? 'los equipos' : 'el equipo'} y me comprometo a cuidar${equipos.length > 1 ? 'los' : 'lo'} y devolver${equipos.length > 1 ? 'los' : 'lo'} a tiempo.</span></label>
+          <span>Recibo ${varios ? 'los equipos completos' : 'el equipo completo'} y me comprometo a cuidar${varios ? 'los' : 'lo'} y devolver${varios ? 'los' : 'lo'} a tiempo.</span></label>
       </fieldset>
-      <p class="ayuda" id="nota-aprobacion" hidden></p>
       <div class="acciones">
-        <button type="submit" class="principal">Registrar préstamo</button>
+        <button type="submit" class="principal">${varios ? `Registrar préstamo de ${equipos.length} equipos` : 'Registrar préstamo'}</button>
         <button type="button" class="secundario" id="b-vaciar">Cancelar</button>
       </div>
     </form>`);
 
   const form = document.getElementById('f-prestamo');
   restaurarBorrador(form);
-  const actualizar = () => {
-    const todos = externo || form.lugar_uso.value === 'Fuera del campus';
-    const nota = document.getElementById('nota-aprobacion');
-    const n = todos ? equipos.length : conAprobacion.length;
-    nota.hidden = n === 0;
-    nota.textContent = todos
-      ? 'Esta solicitud la debe aprobar el responsable del laboratorio antes de la entrega.'
-      : `${n === equipos.length ? 'Estos equipos requieren' : `${plural(n, 'equipo requiere', 'equipos requieren')}`} aprobación del responsable; ${n === equipos.length ? '' : 'los demás salen de inmediato.'}`;
-    form.querySelector('button[type=submit]').textContent = n === equipos.length ? 'Enviar solicitud' : (equipos.length > 1 ? `Registrar préstamo de ${equipos.length} equipos` : 'Registrar préstamo');
-    form.obs_salida.hidden = form.estado_salida.value !== 'obs';
+  if (form.fecha_devolucion.value < hoy || form.fecha_devolucion.value > maximo) form.fecha_devolucion.value = sumarDias(hoy, 1);
+  const actualizarFecha = () => {
+    const v = form.fecha_devolucion.value;
+    const n = v ? Math.round((Date.parse(v) - Date.parse(hoy)) / 864e5) : null;
+    document.getElementById('ayuda-devolucion').textContent = v
+      ? `Devolver a más tardar el ${dia(finDelDia(v))}${n === 0 ? ' (hoy)' : n === 1 ? ' (mañana)' : ` (en ${n} días)`}. Máximo ${DIAS_MAX_PRESTAMO} días calendario.`
+      : `Máximo ${DIAS_MAX_PRESTAMO} días calendario.`;
+    form.querySelectorAll('[data-dias]').forEach(b => b.setAttribute('aria-pressed', String(v === sumarDias(hoy, Number(b.dataset.dias)))));
   };
-  form.addEventListener('change', () => { actualizar(); guardarBorrador(form); });
+  form.querySelectorAll('[data-dias]').forEach(b => b.addEventListener('click', () => {
+    form.fecha_devolucion.value = sumarDias(hoy, Number(b.dataset.dias));
+    actualizarFecha();
+    guardarBorrador(form);
+  }));
+  form.addEventListener('change', () => { actualizarFecha(); guardarBorrador(form); });
   form.addEventListener('input', () => guardarBorrador(form));
-  actualizar();
+  actualizarFecha();
 
   form.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => {
     guardarBorrador(form);
@@ -561,26 +492,22 @@ function vistaSalida() {
   form.addEventListener('submit', ev => {
     ev.preventDefault();
     if (form.nombre && form.nombre.value.trim().length < 3) return aviso(form, 'Escriba su nombre completo.');
+    if (form.tipo && !form.tipo.value) return aviso(form, 'Seleccione su vinculación con la universidad.');
     if (form.acepta_datos && !form.acepta_datos.checked) return aviso(form, 'Debe autorizar el tratamiento de datos para registrar el préstamo.');
     if (!form.proposito.value) return aviso(form, 'Seleccione para qué va a usar los equipos.');
+    if (form.descripcion.value.trim().length < 3) return aviso(form, 'Escriba en pocas palabras la actividad.');
+    const v = form.fecha_devolucion.value;
+    if (!v || v < hoy || v > maximo) return aviso(form, `Elija un día de devolución entre hoy y el ${dia(finDelDia(maximo))}.`);
     if (!form.compromiso.checked) return aviso(form, 'Marque la casilla de compromiso para continuar.');
-    if (!form.fecha_prevista.value) return aviso(form, 'Indique la fecha y hora de devolución.');
     const datos = {
       equipos: equipos.map(e => e.id),
       proposito: form.proposito.value,
       descripcion: form.descripcion.value,
-      curso_proyecto: form.curso_proyecto.value,
-      lugar_uso: form.lugar_uso.value,
-      fecha_prevista: new Date(form.fecha_prevista.value).toISOString(),
-      avalista_email: form.avalista_email?.value || '',
-      condicion_salida: form.estado_salida.value === 'obs' ? 'Con observaciones: ' + form.obs_salida.value : 'Bueno'
+      fecha_devolucion: v,
+      fecha_prevista: finDelDia(v).toISOString(),
+      avalista_email: form.avalista_email?.value || ''
     };
-    if (form.nombre) {
-      datos.perfil = {
-        nombre: form.nombre.value, tipo: form.tipo.value, dependencia: form.dependencia.value,
-        telefono: form.telefono.value, acepta_datos: form.acepta_datos.checked
-      };
-    }
+    if (form.nombre) datos.perfil = { nombre: form.nombre.value, tipo: form.tipo.value, acepta_datos: form.acepta_datos.checked };
     enviar(form, 'prestar', datos, r => {
       if (datos.perfil) {
         sesion.usuario = { ...sesion.usuario, registrado: true, nombre: datos.perfil.nombre, tipo: datos.perfil.tipo };
@@ -621,7 +548,7 @@ async function formularioDevolucion(items) {
   mostrar(`
     ${varios ? '' : `<p class="migas"><a href="?e=${esc(items[0].equipo_id)}">${esc(items[0].equipo_id)}</a></p>`}
     <h1>${varios ? `Devolver ${items.length} equipos` : `Devolver ${esc(items[0].equipo_nombre)}`}</h1>
-    <p class="entrada">Revise cada equipo y lo que incluye.${varios ? ' Desmarque los que todavía no devuelve.' : ''}</p>
+    <p class="entrada">Revise que esté completo.${varios ? ' Desmarque los equipos que todavía no devuelve.' : ''}</p>
     <form id="f-devolucion" novalidate>
       ${items.map((p, i) => {
         const comps = fichas[p.equipo_id]?.componentes || [];
@@ -630,8 +557,8 @@ async function formularioDevolucion(items) {
           <p class="tenue codigo-linea">${esc(p.equipo_id)}${comps.length ? ` · Incluye: ${esc(comps.join(', '))}` : ''}</p>
           <label for="cond-${i}">Estado en que lo entrega</label>
           <select id="cond-${i}" name="condicion">${opciones(catalogos.condiciones, 'Bueno')}</select>
-          <label for="obs-${i}" class="obs-etiqueta">Observaciones <span class="opcional">(opcional)</span></label>
-          <textarea id="obs-${i}" name="observaciones" rows="2" maxlength="500" placeholder="Qué pasó o qué falta"></textarea>
+          <label for="obs-${i}" class="obs-etiqueta" hidden>Describa el daño o lo que falta</label>
+          <textarea id="obs-${i}" name="observaciones" rows="2" maxlength="500" placeholder="Qué pasó o qué falta" hidden></textarea>
         </fieldset>`;
       }).join('')}
       <div class="acciones">
@@ -647,7 +574,8 @@ async function formularioDevolucion(items) {
       const activo = b.querySelector('[name=incluir]')?.checked !== false;
       b.classList.toggle('excluido', !activo);
       const problema = ['Dañado', 'Incompleto'].includes(b.querySelector('[name=condicion]').value);
-      b.querySelector('.obs-etiqueta .opcional').textContent = problema ? '(obligatorio: describa el problema)' : '(opcional)';
+      b.querySelector('.obs-etiqueta').hidden = !problema;
+      b.querySelector('[name=observaciones]').hidden = !problema;
     });
     form.querySelector('button[type=submit]').textContent = incluidos.length > 1 ? `Registrar devolución de ${incluidos.length} equipos` : 'Registrar devolución';
   };
@@ -658,12 +586,12 @@ async function formularioDevolucion(items) {
     const devoluciones = bloques.filter(b => b.querySelector('[name=incluir]')?.checked !== false).map(b => ({
       equipo_id: b.dataset.equipo,
       condicion: b.querySelector('[name=condicion]').value,
-      observaciones: b.querySelector('[name=observaciones]').value
+      observaciones: b.querySelector('[name=observaciones]').hidden ? '' : b.querySelector('[name=observaciones]').value
     }));
     if (!devoluciones.length) return aviso(form, 'Marque al menos un equipo para devolver.');
     const sinDescribir = devoluciones.find(d => ['Dañado', 'Incompleto'].includes(d.condicion) && d.observaciones.trim().length < 5);
     if (sinDescribir) return aviso(form, `Describa el daño o lo que falta de ${sinDescribir.equipo_id}.`);
-    enviar(form, 'devolver', { devoluciones }, r => comprobante(r.prestamos || [r.prestamo], r.requiere_verificacion ? 'devolucion-revision' : 'devolucion'));
+    enviar(form, 'devolver', { devoluciones }, r => comprobante(r.prestamos || [r.prestamo], 'devolucion'));
   });
 }
 
@@ -694,27 +622,22 @@ function formularioReporte(eq) {
 
 function comprobante(prestamos, tipo) {
   const p = prestamos[0];
-  const devolucion = tipo.startsWith('devolucion');
-  const pendientes = prestamos.filter(x => x.estado === 'pendiente').length;
-  const titulo = devolucion ? 'Devolución registrada'
-    : pendientes === prestamos.length ? 'Solicitud enviada'
-    : 'Préstamo registrado';
-  const hora = devolucion ? p.fecha_devolucion : (p.fecha_salida || p.fecha_solicitud);
+  const devolucion = tipo === 'devolucion';
+  const enMantenimiento = prestamos.some(x => x.estado_equipo === 'mantenimiento');
   const mensaje = devolucion
-    ? (tipo === 'devolucion-revision' ? 'Deje los equipos en su lugar; el responsable del laboratorio los revisará.' : 'Gracias por devolver a tiempo.')
-    : pendientes ? 'Los equipos pendientes los aprueba el responsable del laboratorio; le llegará un correo con la respuesta.'
-    : 'Al devolver, escanee de nuevo el QR de cualquiera de los equipos.';
+    ? (enMantenimiento ? 'Los equipos con daño o faltantes quedaron en mantenimiento. El laboratorio ya fue avisado.' : 'El laboratorio ya fue avisado. Gracias por devolver a tiempo.')
+    : 'El laboratorio ya fue avisado. Para devolver, escanee el QR de cualquiera de los equipos o use «Mis préstamos».';
   mostrar(`
     <section class="comprobante">
-      <h1>${titulo}</h1>
-      <p class="hora-grande">${fecha(hora)}</p>
+      <h1>${devolucion ? 'Devolución registrada' : 'Préstamo registrado'}</h1>
+      <p class="hora-grande">${fecha(devolucion ? p.fecha_devolucion : p.fecha_salida)}</p>
       <ul class="prestamos">${prestamos.map(x => `
         <li><span class="titulo-prestamo">${esc(x.equipo_nombre)}</span>
-        <span class="etiqueta etiqueta-${esc(x.estado)}">${esc(ESTADOS_PRESTAMO[x.estado] || x.estado)}</span>
         <span class="detalle">${esc(x.equipo_id)}${devolucion ? ` · ${esc(x.condicion_devolucion)}` : ''}</span></li>`).join('')}</ul>
       <dl class="ficha">
         <div><dt>Responsable</dt><dd>${esc(p.nombre)}</dd></div>
-        ${devolucion ? '' : `<div><dt>Propósito</dt><dd>${esc(p.proposito)}</dd></div><div><dt>Devolución prevista</dt><dd>${fecha(p.fecha_prevista)}</dd></div>`}
+        ${devolucion ? '' : `<div><dt>Para qué</dt><dd>${esc(p.proposito)}<br><span class="tenue">${esc(p.descripcion)}</span></dd></div>
+        <div><dt>Devolver a más tardar</dt><dd><strong>${dia(p.fecha_prevista)}</strong></dd></div>`}
         <div><dt>Número de salida</dt><dd>${esc(p.lote_id || p.id)}</dd></div>
       </dl>
       <p>${mensaje}</p>
@@ -735,40 +658,30 @@ async function vistaMisPrestamos() {
   sesion.usuario = r.usuario;
   almacen.escribir('oan-sesion', sesion);
   pintarCabecera();
-  const abiertos = r.prestamos.filter(p => ['pendiente', 'activo', 'por_verificar'].includes(p.estado));
-  const historial = r.prestamos.filter(p => !abiertos.includes(p));
+  const activos = r.prestamos.filter(p => p.estado === 'activo');
+  const historial = r.prestamos.filter(p => p.estado !== 'activo');
   mostrar(`
     <h1>Mis préstamos</h1>
     <p class="entrada">${esc(r.usuario.nombre || r.usuario.email)}</p>
     <h2>Ahora</h2>
-    ${abiertos.length ? porSalida(abiertos).map(g => bloqueSalida(g, true)).join('') : '<p class="vacio">No tiene equipos a su cargo. Para prestar uno, escanee su código QR.</p>'}
+    ${activos.length ? porSalida(activos).map(g => bloqueSalida(g, true)).join('') : '<p class="vacio">No tiene equipos a su cargo. Para prestar uno, escanee su código QR o búsquelo en <a href="?vista=catalogo">Equipos</a>.</p>'}
     ${historial.length ? `<h2>Historial</h2>${listaPrestamos(historial)}` : ''}
     <p class="pie-sesion">${esc(r.usuario.email)} · <button class="enlace" id="salir">Cerrar sesión</button></p>`);
   document.getElementById('salir').addEventListener('click', () => cerrarSesion());
   raiz.querySelectorAll('[data-devolver-lote]').forEach(b => b.addEventListener('click', () => {
-    formularioDevolucion(abiertos.filter(p => p.lote_id === b.dataset.devolverLote && p.estado === 'activo'));
-  }));
-  raiz.querySelectorAll('[data-cancelar-lote]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('¿Cancelar las solicitudes pendientes de esta salida?')) return;
-    b.disabled = true;
-    const c = await llamar('cancelar', { token: sesion.token, lote_id: b.dataset.cancelarLote });
-    if (!c.ok) alert(c.error);
-    vistaMisPrestamos();
+    formularioDevolucion(activos.filter(p => (p.lote_id || p.id) === b.dataset.devolverLote));
   }));
 }
 
-/** Una salida (varios equipos para una actividad) con sus acciones. */
-function bloqueSalida({ lote, items }, propio) {
+/** Una salida (varios equipos para una actividad). */
+function bloqueSalida({ lote, items }, propio, extra = () => '') {
   const p = items[0];
-  const activos = items.filter(x => x.estado === 'activo').length;
-  const pendientes = items.filter(x => x.estado === 'pendiente').length;
   return `<section class="salida">
-    <p class="salida-titulo"><strong>${esc(p.proposito)}</strong>${p.curso_proyecto ? ` · ${esc(p.curso_proyecto)}` : ''}<br>
-      <span class="tenue">${esc(p.descripcion)} · devolver el ${fecha(p.fecha_prevista)}</span></p>
-    ${listaPrestamos(items)}
-    ${propio && (activos || pendientes) ? `<div class="acciones compactas">
-      ${activos ? `<button class="principal" data-devolver-lote="${esc(lote)}">${activos > 1 ? `Devolver ${activos} equipos` : 'Devolver'}</button>` : ''}
-      ${pendientes ? `<button class="secundario" data-cancelar-lote="${esc(lote)}">Cancelar solicitud</button>` : ''}
+    <p class="salida-titulo"><strong>${propio ? esc(p.proposito) : esc(p.nombre)}</strong>${propio ? '' : ` · ${esc(p.proposito)}`}<br>
+      <span class="tenue">${esc(p.descripcion)} · devolver a más tardar el ${dia(p.fecha_prevista)}</span></p>
+    ${listaPrestamos(items, extra)}
+    ${propio ? `<div class="acciones compactas">
+      <button class="principal" data-devolver-lote="${esc(lote)}">${items.length > 1 ? `Devolver ${items.length} equipos` : 'Devolver'}</button>
     </div>` : ''}
   </section>`;
 }
@@ -778,8 +691,8 @@ function listaPrestamos(lista, extra = () => '') {
     <li class="${p.vencido ? 'vencido' : ''}" data-prestamo="${esc(p.id)}">
       <a href="?e=${esc(p.equipo_id)}" class="titulo-prestamo">${esc(p.equipo_nombre)}</a>
       <span class="etiqueta etiqueta-${esc(p.estado)}">${p.vencido ? 'Vencido' : esc(ESTADOS_PRESTAMO[p.estado] || p.estado)}</span>
-      <span class="detalle">${p.estado === 'activo' ? `Devolver: ${fecha(p.fecha_prevista)}` :
-        p.fecha_devolucion ? `Devuelto: ${fecha(p.fecha_devolucion)}` : `Solicitado: ${fecha(p.fecha_solicitud)}`}</span>
+      <span class="detalle">${p.estado === 'activo' ? `Devolver a más tardar el ${dia(p.fecha_prevista)}` :
+        p.fecha_devolucion ? `Devuelto el ${fecha(p.fecha_devolucion)}` : `Salió el ${fecha(p.fecha_salida)}`}</span>
       ${extra(p)}
     </li>`).join('')}</ul>`;
 }
@@ -791,43 +704,36 @@ async function vistaGestion() {
   if (!r.ok) return mostrar(`<h1>Panel del laboratorio</h1><p class="error">${esc(r.error)}</p>`);
   const g = r.gestion;
   if (!g) return mostrar('<h1>Panel del laboratorio</h1><p class="entrada">Su usuario no es responsable de ningún laboratorio. El administrador lo puede asignar en la hoja «Laboratorios».</p>');
-  const quien = p => `<span class="detalle">${esc(p.nombre)} · <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`;
   const vencidos = g.activos.filter(p => p.vencido);
+  const quien = p => `<span class="detalle">${esc(p.nombre)} · <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`;
+  const movimiento = p => {
+    const devuelto = p.estado === 'devuelto';
+    return `<li>
+      <a href="?e=${esc(p.equipo_id)}" class="titulo-prestamo">${esc(p.equipo_nombre)}</a>
+      <span class="etiqueta etiqueta-${devuelto ? 'devuelto' : 'activo'}">${devuelto ? 'Devuelto' : 'Salió'}</span>
+      <span class="detalle">${esc(p.nombre)} · ${fecha(devuelto ? p.fecha_devolucion : p.fecha_salida)}${devuelto && p.condicion_devolucion && p.condicion_devolucion !== 'Bueno' ? ` · <strong>${esc(p.condicion_devolucion)}</strong>${p.obs_devolucion ? `: ${esc(p.obs_devolucion)}` : ''}` : ''}</span>
+    </li>`;
+  };
   const max = Math.max(1, ...Object.values(g.resumen.por_proposito));
-  const pendientes = porSalida(g.pendientes);
-  const porVerificar = porSalida(g.por_verificar);
   mostrar(`
     <h1>Panel del laboratorio</h1>
-    <p class="entrada">${pendientes.length + porVerificar.length ? `Tiene ${plural(pendientes.length + porVerificar.length, 'asunto', 'asuntos')} por atender.` : 'No hay nada pendiente por atender.'}</p>
-    ${pendientes.length ? `<h2>Por aprobar</h2>${pendientes.map(s => `
-      <section class="salida" data-lote="${esc(s.lote)}">
-        <p class="salida-titulo"><strong>${esc(s.items[0].nombre)}</strong> · ${esc(s.items[0].proposito)}<br>
-        <span class="tenue">${esc(s.items[0].descripcion)} · ${esc(s.items[0].lugar_uso)} · hasta el ${fecha(s.items[0].fecha_prevista)}</span></p>
-        ${listaPrestamos(s.items)}
-        <div class="acciones compactas"><button class="principal" data-accion="aprobar">Aprobar y entregar${s.items.length > 1 ? ` (${s.items.length})` : ''}</button><button class="secundario" data-accion="rechazar">Rechazar</button></div>
-      </section>`).join('')}` : ''}
-    ${porVerificar.length ? `<h2>Devoluciones por verificar</h2>${porVerificar.map(s => `
-      <section class="salida" data-lote="${esc(s.lote)}">
-        <p class="salida-titulo"><strong>${esc(s.items[0].nombre)}</strong> · devuelto el ${fecha(s.items[0].fecha_devolucion)}</p>
-        ${listaPrestamos(s.items, p => `<span class="detalle">Entregado: ${esc(p.condicion_devolucion)}${p.obs_devolucion ? ` — ${esc(p.obs_devolucion)}` : ''}</span>
-          <div class="acciones compactas" data-prestamo="${esc(p.id)}"><button class="secundario" data-accion="mantenimiento">Enviar a mantenimiento</button></div>`)}
-        <div class="acciones compactas"><button class="principal" data-accion="verificar">${s.items.length > 1 ? `Todo en orden (${s.items.length})` : 'Revisado: disponible'}</button></div>
-      </section>`).join('')}` : ''}
+    <p class="entrada">${plural(g.activos.length, 'equipo prestado', 'equipos prestados')}${vencidos.length ? `, <strong>${plural(vencidos.length, 'vencido', 'vencidos')}</strong>` : ''}${g.incidencias.length ? ` y ${plural(g.incidencias.length, 'novedad abierta', 'novedades abiertas')}` : ''}.</p>
     ${vencidos.length ? `<h2>Vencidos</h2>${listaPrestamos(vencidos, quien)}` : ''}
-    <h2>En préstamo</h2>
-    ${g.activos.some(p => !p.vencido) ? listaPrestamos(g.activos.filter(p => !p.vencido), quien) : '<p class="vacio">No hay otros equipos prestados.</p>'}
     ${g.incidencias.length ? `<h2>Novedades abiertas</h2><ul class="prestamos">${g.incidencias.map(i => `
       <li data-incidencia="${esc(i.id)}"><a class="titulo-prestamo" href="?e=${esc(i.equipo_id)}">${esc(i.equipo_nombre)}</a>
       <span class="etiqueta etiqueta-incidencia">${esc(i.tipo)}</span>
       <span class="detalle">${esc(i.descripcion)}</span><span class="detalle tenue">${esc(i.email)} · ${fecha(i.fecha)}</span>
       <div class="acciones compactas"><button class="secundario" data-cerrar="${esc(i.id)}">Marcar resuelta</button></div></li>`).join('')}</ul>` : ''}
+    <h2>En préstamo</h2>
+    ${g.activos.length ? porSalida(g.activos).map(sal => bloqueSalida(sal, false, quien)).join('') : '<p class="vacio">No hay equipos prestados.</p>'}
+    <h2>Movimientos de los últimos 7 días</h2>
+    ${g.movimientos?.length ? `<ul class="prestamos">${g.movimientos.map(movimiento).join('')}</ul>` : '<p class="vacio">Sin préstamos ni devoluciones esta semana.</p>'}
     <h2>Últimos 30 días</h2>
     <p>${plural(g.resumen.prestamos_30_dias, 'préstamo', 'préstamos')}.</p>
     ${Object.keys(g.resumen.por_proposito).length ? `<table class="barras"><caption>Préstamos por propósito</caption><tbody>${Object.entries(g.resumen.por_proposito).sort((a, b) => b[1] - a[1]).map(([k, v]) => `
       <tr><th scope="row">${esc(k)}</th><td><span class="barra" style="width:${Math.round(v / max * 100)}%"></span>${v}</td></tr>`).join('')}</tbody></table>` : ''}
     ${g.resumen.equipos_mas_usados.length ? `<h3>Equipos más usados</h3><ol class="ranking">${g.resumen.equipos_mas_usados.map(e => `<li><a href="?e=${esc(e.equipo_id)}">${esc(e.nombre)}</a> — ${e.prestamos}</li>`).join('')}</ol>` : ''}
   `);
-  conectarGestion(raiz, vistaGestion);
   raiz.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', async () => {
     const solucion = prompt('¿Cómo se resolvió?');
     if (solucion === null) return;
@@ -835,6 +741,7 @@ async function vistaGestion() {
     b.disabled = true;
     const c = await llamar('cerrarIncidencia', { token: sesion.token, incidencia_id: b.dataset.cerrar, solucion, equipo_disponible: disponible });
     if (!c.ok) alert(c.error);
+    cacheCatalogo = null;
     vistaGestion();
   }));
 }
@@ -859,7 +766,7 @@ async function vistaCatalogo() {
   const categorias = [...new Set(equipos.map(e => e.categoria).filter(Boolean))];
   const disponibles = equipos.filter(e => e.estado === 'disponible').length;
   const situacion = e => e.estado === 'disponible' ? 'Disponible'
-    : e.estado === 'prestado' && e.disponible_desde ? `Prestado hasta el ${fecha(e.disponible_desde)}`
+    : e.estado === 'prestado' && e.disponible_desde ? `Prestado hasta el ${formatoDiaCorto.format(new Date(e.disponible_desde))}`
     : (ESTADOS_EQUIPO[e.estado] || e.estado);
 
   mostrar(`

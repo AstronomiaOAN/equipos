@@ -17,13 +17,14 @@ const CONFIG = {
   DOMINIOS_INTERNOS: ['unal.edu.co'],     // correos considerados institucionales
   CORREOS_INTERNOS: ['oan.unal@gmail.com'], // cuentas fuera de esos dominios que también son del OAN
   PERMITIR_EXTERNOS: true,                // ¿pueden iniciar sesión correos no institucionales?
-  APROBAR_FUERA_DEL_CAMPUS: true,         // préstamos fuera del campus requieren aprobación
   DIAS_TOKEN: 30,                         // vigencia de la sesión en el celular
   MINUTOS_CODIGO: 10,                     // vigencia del código enviado por correo
   MAX_INTENTOS_CODIGO: 5,
   MAX_ENVIOS_CODIGO: 3,                   // por correo cada 10 minutos
   HORAS_RECORDATORIO: 24,                 // aviso antes del vencimiento
-  MAX_DIAS_POR_DEFECTO: 7,
+  DIAS_MAX_PRESTAMO: 7,                   // días calendario: se devuelve a más tardar ese día
+  ZONA_HORARIA: 'America/Bogota',
+  AVISAR_RESPONSABLES: true,              // correo al laboratorio en cada préstamo y devolución
   MAX_EQUIPOS_POR_SALIDA: 30,
   CORREO_COPIA_ALERTAS: '',               // opcional: correo que recibe copia de las alertas
   // Una cuenta @gmail.com puede enviar unos 100 correos al día. Si se agota, desactive los
@@ -33,16 +34,13 @@ const CONFIG = {
 
 const HOJAS = {
   Equipos: ['id', 'nombre', 'categoria', 'laboratorio_id', 'marca', 'modelo', 'serie',
-    'nivel_control', 'estado', 'max_dias', 'componentes', 'notas',
+    'estado', 'componentes', 'notas',
     'descripcion', 'especificaciones', 'foto', 'credito_foto'],
   Laboratorios: ['id', 'nombre', 'ubicacion', 'responsable_email'],
-  Usuarios: ['email', 'nombre', 'tipo', 'dependencia', 'telefono', 'rol', 'activo',
-    'acepta_datos', 'fecha_registro'],
-  Prestamos: ['id', 'equipo_id', 'email', 'nombre', 'tipo_usuario', 'proposito', 'descripcion',
-    'curso_proyecto', 'lugar_uso', 'avalista_email', 'fecha_solicitud', 'fecha_salida',
-    'fecha_prevista', 'fecha_devolucion', 'estado', 'condicion_salida', 'condicion_devolucion',
-    'obs_devolucion', 'componentes_ok', 'devuelto_por', 'aprobado_por', 'motivo_rechazo',
-    'verificado_por', 'fecha_verificacion', 'recordatorio_enviado', 'lote_id'],
+  Usuarios: ['email', 'nombre', 'tipo', 'rol', 'activo', 'acepta_datos', 'fecha_registro'],
+  Prestamos: ['id', 'lote_id', 'equipo_id', 'email', 'nombre', 'tipo_usuario', 'proposito', 'descripcion',
+    'avalista_email', 'fecha_solicitud', 'fecha_salida', 'fecha_prevista', 'fecha_devolucion', 'estado',
+    'condicion_devolucion', 'obs_devolucion', 'componentes_ok', 'devuelto_por', 'recordatorio_enviado'],
   Incidencias: ['id', 'equipo_id', 'prestamo_id', 'email', 'tipo', 'descripcion', 'fecha',
     'estado', 'resuelto_por', 'fecha_cierre', 'solucion'],
   Bitacora: ['fecha', 'email', 'accion', 'detalle']
@@ -51,16 +49,14 @@ const HOJAS = {
 const CATALOGOS = {
   propositos: ['Docencia (clase)', 'Práctica de laboratorio', 'Investigación / tesis',
     'Observación astronómica', 'Divulgación / evento público', 'Mantenimiento o calibración', 'Otro'],
-  lugares: ['Dentro del OAN', 'Campus universitario', 'Fuera del campus'],
   tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente', 'Investigador',
     'Personal técnico o administrativo', 'Externo'],
   condiciones: ['Bueno', 'Con detalles menores', 'Dañado', 'Incompleto'],
   tipos_incidencia: ['Daño', 'Faltante', 'Falla de funcionamiento', 'Requiere calibración', 'Otro']
 };
 
-const NIVELES = ['libre', 'supervisado', 'restringido'];
-const ESTADOS_EQUIPO = ['disponible', 'reservado', 'prestado', 'en_revision', 'mantenimiento', 'baja'];
-const ESTADOS_ABIERTOS = ['pendiente', 'activo', 'por_verificar'];
+const ESTADOS_EQUIPO = ['disponible', 'prestado', 'mantenimiento', 'baja'];
+const ESTADOS_ABIERTOS = ['activo'];
 
 class ErrorApp extends Error {
   constructor(mensaje, codigo) {
@@ -104,9 +100,6 @@ const ACCIONES = {
   catalogo: accionCatalogo_,
   prestar: conBloqueo_(accionPrestar_),
   devolver: conBloqueo_(accionDevolver_),
-  cancelar: conBloqueo_(accionCancelar_),
-  aprobar: conBloqueo_(accionAprobar_),
-  verificar: conBloqueo_(accionVerificar_),
   reportar: conBloqueo_(accionReportar_),
   cerrarIncidencia: conBloqueo_(accionCerrarIncidencia_),
   misPrestamos: accionMisPrestamos_
@@ -245,12 +238,7 @@ function guardarPerfil_(email, perfil) {
   if (!existente && perfil.acepta_datos !== true) {
     throw new ErrorApp('Debe aceptar la política de tratamiento de datos personales.');
   }
-  const datos = {
-    nombre: nombre,
-    tipo: tipo,
-    dependencia: texto_(perfil.dependencia, 120),
-    telefono: texto_(perfil.telefono, 30)
-  };
+  const datos = { nombre: nombre, tipo: tipo };
   if (existente) {
     actualizar_('Usuarios', existente, datos);
     return existente;
@@ -269,8 +257,6 @@ function usuarioPublico_(email, u) {
     interno: esInterno_(email),
     nombre: u ? u.nombre : '',
     tipo: u ? u.tipo : (esInterno_(email) ? '' : 'Externo'),
-    dependencia: u ? u.dependencia : '',
-    telefono: u ? String(u.telefono || '') : '',
     rol: u ? (u.rol || 'usuario') : 'usuario',
     gestiona: laboratoriosQueGestiona_(email, u).map(l => l.id)
   };
@@ -343,7 +329,6 @@ function accionCatalogo_() {
     .map(e => {
       e.id = String(e.id).trim();
       e.estado = String(e.estado || 'disponible').trim().toLowerCase();
-      e.nivel_control = String(e.nivel_control || 'libre').trim().toLowerCase();
       const pub = equipoPublico_(e, labs[e.laboratorio_id] || { nombre: e.laboratorio_id || '', ubicacion: '' });
       const p = abiertos[e.id];
       if (p && p.estado === 'activo') pub.disponible_desde = iso_(p.fecha_prevista);
@@ -356,12 +341,13 @@ function accionCatalogo_() {
 }
 
 // ─── Préstamo (uno o varios equipos para una misma actividad) ───────────────
+// No requiere aprobación: el préstamo queda activo al registrarlo y el laboratorio recibe el aviso.
 
 function accionPrestar_(d) {
   const s = sesion_(d.token);
   let usuario = s.usuario;
   if (d.perfil) usuario = guardarPerfil_(s.email, d.perfil);
-  if (!usuario) throw new ErrorApp('Complete su perfil antes de solicitar un préstamo.');
+  if (!usuario) throw new ErrorApp('Complete su perfil antes de pedir un préstamo.');
 
   const equipos = idsDe_(d.equipos || d.equipo_id).map(buscarEquipo_);
   const ocupados = equipos.filter(e => e.estado !== 'disponible');
@@ -369,121 +355,72 @@ function accionPrestar_(d) {
     throw new ErrorApp('No están disponibles: ' +
       ocupados.map(e => e.id + ' (' + e.estado.replace('_', ' ') + ')').join(', ') + '. Quítelos de la lista.', 409);
   }
-  const proposito = enLista_(d.proposito, CATALOGOS.propositos, 'el propósito');
-  const lugar = enLista_(d.lugar_uso, CATALOGOS.lugares, 'el lugar de uso');
-  const descripcion = texto_(d.descripcion, 500);
-  if (descripcion.length < 5) throw new ErrorApp('Describa brevemente para qué usará los equipos.');
+  const proposito = enLista_(d.proposito, CATALOGOS.propositos, 'para qué los va a usar');
+  const descripcion = texto_(d.descripcion, 300);
+  if (descripcion.length < 3) throw new ErrorApp('Escriba en pocas palabras la actividad.');
+  const prevista = fechaDevolucion_(d);
 
-  const ahora = new Date();
-  const prevista = new Date(d.fecha_prevista);
-  const maxDias = Math.min.apply(null, equipos.map(e => Number(e.max_dias) || CONFIG.MAX_DIAS_POR_DEFECTO));
-  if (isNaN(prevista.getTime()) || prevista <= ahora) {
-    throw new ErrorApp('Indique una fecha y hora de devolución posterior al momento actual.');
-  }
-  if (prevista.getTime() - ahora.getTime() > maxDias * 864e5 + 36e5) {
-    throw new ErrorApp(equipos.length > 1
-      ? 'Con estos equipos el plazo máximo es de ' + maxDias + ' día(s).'
-      : 'Este equipo se presta máximo ' + maxDias + ' día(s).');
-  }
-
-  const externo = usuario.tipo === 'Externo';
   let avalista = '';
-  if (externo) {
+  if (usuario.tipo === 'Externo') {
     avalista = normalizarEmail_(d.avalista_email);
     if (!esInterno_(avalista)) {
       throw new ErrorApp('Los usuarios externos necesitan un avalista con correo institucional.');
     }
   }
-  const aprobacionGeneral = externo || (CONFIG.APROBAR_FUERA_DEL_CAMPUS && lugar === 'Fuera del campus');
-  const loteId = nuevoId_('L');
-  const condicion = texto_(d.condicion_salida, 300) || 'Bueno';
 
-  // Todo validado: se registra cada equipo con los datos comunes de la actividad.
+  const ahora = new Date();
+  const loteId = nuevoId_('L');
   const items = equipos.map(eq => {
-    const requiere = aprobacionGeneral || eq.nivel_control === 'restringido';
     const p = {
       id: nuevoId_('P'), lote_id: loteId, equipo_id: eq.id, email: s.email, nombre: usuario.nombre,
-      tipo_usuario: usuario.tipo, proposito: proposito, descripcion: descripcion,
-      curso_proyecto: texto_(d.curso_proyecto, 150), lugar_uso: lugar, avalista_email: avalista,
-      fecha_solicitud: ahora, fecha_salida: requiere ? '' : ahora, fecha_prevista: prevista,
-      estado: requiere ? 'pendiente' : 'activo', condicion_salida: condicion
+      tipo_usuario: usuario.tipo, proposito: proposito, descripcion: descripcion, avalista_email: avalista,
+      fecha_solicitud: ahora, fecha_salida: ahora, fecha_prevista: prevista, estado: 'activo'
     };
     agregar_('Prestamos', p);
-    actualizar_('Equipos', eq, { estado: requiere ? 'reservado' : 'prestado' });
-    return { p: p, eq: eq, requiere: requiere };
+    actualizar_('Equipos', eq, { estado: 'prestado' });
+    return { p: p, eq: eq };
   });
-  bitacora_(s.email, 'prestamo', loteId + ': ' + items.map(i => i.eq.id + (i.requiere ? ' (pendiente)' : '')).join(', '));
+  bitacora_(s.email, 'prestamo', loteId + ': ' + items.map(i => i.eq.id).join(', '));
 
-  porLaboratorio_(items).forEach(grupo => {
-    const pendientes = grupo.items.filter(i => i.requiere);
-    const supervisados = grupo.items.filter(i => !i.requiere && i.eq.nivel_control === 'supervisado');
-    if (pendientes.length) {
-      avisarResponsables_(grupo.lab, 'Solicitud por aprobar: ' + resumenEquipos_(pendientes),
-        ['<b>' + esc_(usuario.nombre) + '</b> solicita ' + (pendientes.length > 1 ? 'estos equipos' : 'este equipo') +
-          '. Apruebe o rechace en la web.', detalleSalida_(pendientes)]
-          .concat([enlace_('?vista=gestion', 'Abrir panel del laboratorio')]), avalista);
-    }
-    if (supervisados.length) {
-      avisarResponsables_(grupo.lab, 'Salida de equipo supervisado: ' + resumenEquipos_(supervisados),
-        [detalleSalida_(supervisados)]);
-    }
-  });
-  const algunoPendiente = items.some(i => i.requiere);
-  if (algunoPendiente || CONFIG.CORREO_COMPROBANTES) enviarCorreo_(s.email, (algunoPendiente ? 'Solicitud recibida: ' : 'Comprobante de préstamo: ') + resumenEquipos_(items), [
-    algunoPendiente
-      ? 'Los equipos marcados como «pendiente» esperan la aprobación del responsable del laboratorio.'
-      : 'Quedó registrado el préstamo. Recuerde escanear el QR de cada equipo al devolverlo.',
-    detalleSalida_(items)
-  ]);
-  return {
-    lote_id: loteId,
-    prestamos: items.map(i => prestamoPublico_(i.p, i.eq)),
-    requiere_aprobacion: algunoPendiente,
-    prestamo: prestamoPublico_(items[0].p, items[0].eq)
-  };
-}
-
-function accionCancelar_(d) {
-  const s = sesion_(d.token);
-  const lista = prestamosObjetivo_(d).filter(p => p.estado === 'pendiente' && p.email === s.email);
-  if (!lista.length) throw new ErrorApp('No hay solicitudes pendientes suyas para cancelar.', 409);
-  lista.forEach(p => {
-    actualizar_('Prestamos', p, { estado: 'cancelado' });
-    const eq = buscarEquipo_(p.equipo_id);
-    if (eq.estado === 'reservado') actualizar_('Equipos', eq, { estado: 'disponible' });
-  });
-  bitacora_(s.email, 'cancelacion', lista.map(p => p.id).join(', '));
-  return { cancelados: lista.length };
-}
-
-// ─── Aprobación (equipos restringidos, externos, fuera del campus) ──────────
-
-function accionAprobar_(d) {
-  const s = sesion_(d.token);
-  const items = atendibles_(s, prestamosObjetivo_(d), 'pendiente', 'No hay solicitudes pendientes para atender.');
-  const motivo = texto_(d.motivo, 300);
-  if (!d.aprobar && motivo.length < 3) throw new ErrorApp('Indique el motivo del rechazo.');
-
-  items.forEach(i => {
-    if (d.aprobar) {
-      actualizar_('Prestamos', i.p, { estado: 'activo', fecha_salida: new Date(), aprobado_por: s.email });
-      actualizar_('Equipos', i.eq, { estado: 'prestado' });
-    } else {
-      actualizar_('Prestamos', i.p, { estado: 'rechazado', aprobado_por: s.email, motivo_rechazo: motivo });
-      actualizar_('Equipos', i.eq, { estado: 'disponible' });
-    }
-  });
-  const p0 = items[0].p;
-  enviarCorreo_(p0.email, (d.aprobar ? 'Préstamo aprobado: ' : 'Solicitud no aprobada: ') + resumenEquipos_(items),
-    d.aprobar
-      ? ['Su solicitud fue aprobada y los equipos quedaron entregados a su nombre.', detalleSalida_(items)]
-      : ['Su solicitud no fue aprobada. Motivo: ' + esc_(motivo), detalleSalida_(items)]);
-  bitacora_(s.email, d.aprobar ? 'aprobacion' : 'rechazo', items.map(i => i.p.id).join(', '));
+  if (CONFIG.AVISAR_RESPONSABLES) {
+    porLaboratorio_(items).forEach(grupo => avisarResponsables_(grupo.lab,
+      'Préstamo: ' + resumenEquipos_(grupo.items) + ' — ' + usuario.nombre,
+      [detalleSalida_(grupo.items), enlace_('?vista=gestion', 'Ver el panel del laboratorio')], avalista));
+  }
+  if (CONFIG.CORREO_COMPROBANTES) {
+    enviarCorreo_(s.email, 'Comprobante de préstamo: ' + resumenEquipos_(items), [
+      'Quedó registrado el préstamo. Devuélvalo a más tardar el día indicado y escanee el QR al entregarlo.',
+      detalleSalida_(items)
+    ]);
+  }
   const pub = items.map(i => prestamoPublico_(i.p, i.eq));
-  return { prestamos: pub, prestamo: pub[0] };
+  return { lote_id: loteId, prestamos: pub, prestamo: pub[0] };
+}
+
+/**
+ * Fecha de devolución en días calendario: el préstamo vence al final del día elegido
+ * (23:59, hora de Colombia), desde hoy hasta DIAS_MAX_PRESTAMO días después.
+ * Acepta «fecha_devolucion» (AAAA-MM-DD) o, por compatibilidad, «fecha_prevista» (fecha y hora).
+ */
+function fechaDevolucion_(d) {
+  let dia = String(d.fecha_devolucion || '').trim();
+  if (!dia && d.fecha_prevista) {
+    const f = new Date(d.fecha_prevista);
+    if (!isNaN(f.getTime())) dia = Utilities.formatDate(f, CONFIG.ZONA_HORARIA, 'yyyy-MM-dd');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) throw new ErrorApp('Elija el día de devolución.');
+  const hoy = Utilities.formatDate(new Date(), CONFIG.ZONA_HORARIA, 'yyyy-MM-dd');
+  const dias = Math.round((Date.parse(dia + 'T00:00:00Z') - Date.parse(hoy + 'T00:00:00Z')) / 864e5);
+  if (isNaN(dias) || dias < 0) throw new ErrorApp('El día de devolución no puede ser anterior a hoy.');
+  if (dias > CONFIG.DIAS_MAX_PRESTAMO) {
+    throw new ErrorApp('El préstamo puede durar máximo ' + CONFIG.DIAS_MAX_PRESTAMO + ' días calendario.');
+  }
+  return new Date(dia + 'T23:59:00-05:00');
 }
 
 // ─── Devolución (uno o varios equipos) ──────────────────────────────────────
+// No requiere verificación: el equipo queda disponible al registrarla y el laboratorio recibe el aviso.
+// Si se devuelve dañado o incompleto, queda en mantenimiento y se abre una novedad.
 
 function accionDevolver_(d) {
   const s = sesion_(d.token);
@@ -498,30 +435,25 @@ function accionDevolver_(d) {
     if (vistos[eq.id]) throw new ErrorApp('El equipo ' + eq.id + ' está repetido.');
     vistos[eq.id] = true;
     const p = prestamoAbiertoDe_(eq.id);
-    if (!p || p.estado !== 'activo') throw new ErrorApp(eq.id + ' no tiene un préstamo activo.', 409);
-    const gestor = esResponsable_(s.email, eq.laboratorio_id, s.usuario);
-    if (p.email !== s.email && !gestor) {
+    if (!p) throw new ErrorApp(eq.id + ' no tiene un préstamo activo.', 409);
+    if (p.email !== s.email && !esResponsable_(s.email, eq.laboratorio_id, s.usuario)) {
       throw new ErrorApp('Solo quien tiene el préstamo de ' + eq.id + ' o un responsable del laboratorio puede registrar la devolución.', 403);
     }
-    const condicion = enLista_(pedido.condicion, CATALOGOS.condiciones, 'el estado de ' + eq.id);
+    const condicion = enLista_(pedido.condicion || 'Bueno', CATALOGOS.condiciones, 'el estado de ' + eq.id);
     const componentesOk = pedido.componentes_ok !== false && condicion !== 'Incompleto';
     const obs = texto_(pedido.observaciones, 500);
     const problema = condicion === 'Dañado' || !componentesOk;
     if (problema && obs.length < 5) throw new ErrorApp('Describa el daño o el faltante de ' + eq.id + '.');
-    return { eq: eq, p: p, gestor: gestor, condicion: condicion, componentesOk: componentesOk, obs: obs, problema: problema };
+    return { eq: eq, p: p, condicion: condicion, componentesOk: componentesOk, obs: obs, problema: problema };
   });
 
   const ahora = new Date();
   items.forEach(i => {
-    i.verificar = !i.gestor && (i.eq.nivel_control !== 'libre' || i.problema);
-    const cambios = {
+    actualizar_('Prestamos', i.p, {
       fecha_devolucion: ahora, condicion_devolucion: i.condicion, obs_devolucion: i.obs,
-      componentes_ok: i.componentesOk ? 'SÍ' : 'NO', devuelto_por: s.email,
-      estado: i.verificar ? 'por_verificar' : 'devuelto'
-    };
-    if (i.gestor) Object.assign(cambios, { verificado_por: s.email, fecha_verificacion: ahora });
-    actualizar_('Prestamos', i.p, cambios);
-    i.estadoEquipo = i.verificar ? 'en_revision' : (i.problema ? 'mantenimiento' : 'disponible');
+      componentes_ok: i.componentesOk ? 'SÍ' : 'NO', devuelto_por: s.email, estado: 'devuelto'
+    });
+    i.estadoEquipo = i.problema ? 'mantenimiento' : 'disponible';
     actualizar_('Equipos', i.eq, { estado: i.estadoEquipo });
     if (i.problema) {
       agregar_('Incidencias', {
@@ -532,69 +464,21 @@ function accionDevolver_(d) {
   });
   bitacora_(s.email, 'devolucion', items.map(i => i.p.id + ' ' + i.condicion).join(', '));
 
-  porLaboratorio_(items.filter(i => i.verificar)).forEach(grupo => {
-    const conNovedad = grupo.items.some(i => i.problema);
-    avisarResponsables_(grupo.lab, (conNovedad ? 'Devolución con novedad: ' : 'Devolución por verificar: ') +
-      resumenEquipos_(grupo.items), [detalleSalida_(grupo.items, true), enlace_('?vista=gestion', 'Verificar en el panel')]);
-  });
-  const titular = items[0].p.email;
-  if (CONFIG.CORREO_COMPROBANTES) enviarCorreo_(titular, 'Comprobante de devolución: ' + resumenEquipos_(items),
-    ['Quedó registrada la devolución.', detalleSalida_(items, true)]);
-
-  const pub = items.map(i => Object.assign(prestamoPublico_(i.p, i.eq),
-    { estado_equipo: i.estadoEquipo, requiere_verificacion: i.verificar }));
-  return {
-    prestamos: pub,
-    requiere_verificacion: items.some(i => i.verificar),
-    // Compatibilidad con la devolución de un solo equipo
-    prestamo: pub[0], estado_equipo: items[0].estadoEquipo
-  };
-}
-
-function accionVerificar_(d) {
-  const s = sesion_(d.token);
-  const items = atendibles_(s, prestamosObjetivo_(d), 'por_verificar', 'No hay devoluciones por verificar.');
-  const obs = texto_(d.observaciones, 500);
-  const estado = d.enviar_mantenimiento ? 'mantenimiento' : 'disponible';
-  items.forEach(i => {
-    actualizar_('Prestamos', i.p, {
-      estado: 'devuelto', verificado_por: s.email, fecha_verificacion: new Date(),
-      obs_devolucion: [i.p.obs_devolucion, obs ? 'Verificación: ' + obs : ''].filter(String).join(' · ')
+  if (CONFIG.AVISAR_RESPONSABLES) {
+    porLaboratorio_(items).forEach(grupo => {
+      const novedad = grupo.items.some(i => i.problema);
+      avisarResponsables_(grupo.lab, (novedad ? 'Devolución con novedad: ' : 'Devolución: ') +
+        resumenEquipos_(grupo.items) + ' — ' + grupo.items[0].p.nombre,
+        [novedad ? '<p><b>Hay equipos devueltos con daño o faltantes; quedaron en mantenimiento.</b></p>' : '',
+          detalleSalida_(grupo.items, true), enlace_('?vista=gestion', 'Ver el panel del laboratorio')].filter(String));
     });
-    actualizar_('Equipos', i.eq, { estado: estado });
-  });
-  bitacora_(s.email, 'verificacion', items.map(i => i.p.id).join(', ') + ' → ' + estado);
-  const pub = items.map(i => prestamoPublico_(i.p, i.eq));
-  return { prestamos: pub, prestamo: pub[0], estado_equipo: estado };
-}
-
-/** Préstamos en el estado dado que el responsable puede atender. */
-function atendibles_(s, prestamos, estado, siNoHay) {
-  const enEstado = conEquipo_(prestamos.filter(p => p.estado === estado));
-  if (!enEstado.length) throw new ErrorApp(siNoHay, 409);
-  const propios = enEstado.filter(i => esResponsable_(s.email, i.eq.laboratorio_id, s.usuario));
-  if (!propios.length) throw new ErrorApp('Solo el responsable del laboratorio puede hacer esta acción.', 403);
-  return propios;
-}
-
-/** Préstamos indicados por prestamo_id o por lote_id (todos los de esa salida). */
-function prestamosObjetivo_(d) {
-  if (d.lote_id) {
-    // Préstamos registrados antes de existir las salidas usan su propio id como lote.
-    return leer_('Prestamos').filter(p => (p.lote_id || p.id) === d.lote_id);
   }
-  if (d.prestamo_id) return [buscarPrestamo_(d.prestamo_id)];
-  throw new ErrorApp('Falta indicar el préstamo.');
-}
-
-function conEquipo_(prestamos) {
-  const equipos = indice_(leer_('Equipos'));
-  return prestamos.filter(p => equipos[p.equipo_id]).map(p => {
-    const eq = equipos[p.equipo_id];
-    eq.estado = String(eq.estado || '').trim().toLowerCase();
-    eq.nivel_control = String(eq.nivel_control || 'libre').trim().toLowerCase();
-    return { p: p, eq: eq };
-  });
+  if (CONFIG.CORREO_COMPROBANTES) {
+    enviarCorreo_(items[0].p.email, 'Comprobante de devolución: ' + resumenEquipos_(items),
+      ['Quedó registrada la devolución.', detalleSalida_(items, true)]);
+  }
+  const pub = items.map(i => Object.assign(prestamoPublico_(i.p, i.eq), { estado_equipo: i.estadoEquipo }));
+  return { prestamos: pub, prestamo: pub[0], estado_equipo: items[0].estadoEquipo };
 }
 
 function idsDe_(valor) {
@@ -675,11 +559,13 @@ function accionMisPrestamos_(d) {
     const pub = p => prestamoPublico_(p, equipos[p.equipo_id]);
     const hace30 = Date.now() - 30 * 864e5;
     const recientes = mios_labs.filter(p => fechaNum_(p.fecha_solicitud) >= hace30 &&
-      ['activo', 'por_verificar', 'devuelto'].indexOf(p.estado) >= 0);
+      ['activo', 'devuelto'].indexOf(p.estado) >= 0);
+    const ultimo = p => Math.max(fechaNum_(p.fecha_salida), fechaNum_(p.fecha_devolucion));
+    const hace7 = Date.now() - 7 * 864e5;
     gestion = {
       laboratorios: labs,
-      pendientes: mios_labs.filter(p => p.estado === 'pendiente').sort(porFecha).map(pub),
-      por_verificar: mios_labs.filter(p => p.estado === 'por_verificar').sort(porFecha).map(pub),
+      movimientos: mios_labs.filter(p => ultimo(p) >= hace7 && ['activo', 'devuelto'].indexOf(p.estado) >= 0)
+        .sort((a, b) => ultimo(b) - ultimo(a)).slice(0, 60).map(pub),
       activos: mios_labs.filter(p => p.estado === 'activo')
         .sort((a, b) => fechaNum_(a.fecha_prevista) - fechaNum_(b.fecha_prevista)).map(pub),
       incidencias: leer_('Incidencias')
@@ -726,15 +612,15 @@ function revisarVencimientos() {
     const avalistas = items.map(i => i.p.avalista_email).filter(String).filter((v, i, a) => a.indexOf(v) === i);
     enviarCorreo_(email, 'Préstamo vencido: ' + resumenEquipos_(items), [
       'Ya pasó la fecha de devolución de ' + (items.length > 1 ? 'estos equipos' : 'este equipo') + '.',
-      lista_(items.map(i => i.eq.nombre + ' (' + i.eq.id + '), vencía ' + fechaTexto_(i.p.fecha_prevista))),
+      lista_(items.map(i => i.eq.nombre + ' (' + i.eq.id + '), debía devolverse el ' + fechaDia_(i.p.fecha_prevista))),
       'Devuélvalo(s) y escanee el QR, o comuníquese con el laboratorio para ampliar el plazo.'
     ], { copia: avalistas.join(',') });
   });
   Object.keys(proximosPorPersona).forEach(email => {
     const items = proximosPorPersona[email];
     enviarCorreo_(email, 'Recordatorio de devolución: ' + resumenEquipos_(items), [
-      'Su préstamo vence pronto:',
-      lista_(items.map(i => i.eq.nombre + ' (' + i.eq.id + '): ' + fechaTexto_(i.p.fecha_prevista)))
+      'Recuerde devolver hoy:',
+      lista_(items.map(i => i.eq.nombre + ' (' + i.eq.id + ')'))
     ]);
     items.forEach(i => actualizar_('Prestamos', i.p, { recordatorio_enviado: ahora }));
   });
@@ -742,7 +628,7 @@ function revisarVencimientos() {
     const items = vencidosPorLab[lab.id] || [];
     if (!items.length) return;
     avisarResponsables_(lab, items.length + ' préstamo(s) vencido(s) en ' + lab.nombre, [lista_(items.map(i =>
-      i.eq.nombre + ' (' + i.eq.id + ') — ' + i.p.nombre + ', ' + i.p.email + ', vencía ' + fechaTexto_(i.p.fecha_prevista)))]);
+      i.eq.nombre + ' (' + i.eq.id + ') — ' + i.p.nombre + ', ' + i.p.email + ', debía devolverse el ' + fechaDia_(i.p.fecha_prevista)))]);
   });
 }
 
@@ -769,7 +655,6 @@ function configurar() {
   });
   cargarDatosIniciales_(libro);
   const equipos = libro.getSheetByName('Equipos');
-  validarColumna_(equipos, 'nivel_control', NIVELES);
   validarColumna_(equipos, 'estado', ESTADOS_EQUIPO);
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('SECRETO_TOKEN')) {
@@ -788,7 +673,7 @@ function cargarDatosIniciales_(libro) {
   if (vacia('Laboratorios') || vacia('Equipos')) cargarEjemplos_(admin);
   if (vacia('Usuarios') && admin) {
     agregar_('Usuarios', { email: admin, nombre: 'Observatorio Astronómico Nacional', tipo: 'Personal técnico o administrativo',
-      dependencia: 'OAN', rol: 'admin', activo: 'SÍ', acepta_datos: new Date(), fecha_registro: new Date() });
+      rol: 'admin', activo: 'SÍ', acepta_datos: new Date(), fecha_registro: new Date() });
   }
   let ins = libro.getSheetByName('Instrucciones');
   if (!ins) {
@@ -841,7 +726,7 @@ function cargarEjemplos_(admin) {
   const hoja = hoja_('Equipos');
   const cab = encabezados_(hoja);
   const existentes = indice_(leer_('Equipos'));
-  const descriptivas = ['nombre', 'categoria', 'laboratorio_id', 'marca', 'modelo', 'nivel_control', 'max_dias',
+  const descriptivas = ['nombre', 'categoria', 'laboratorio_id', 'marca', 'modelo',
     'componentes', 'notas', 'descripcion', 'especificaciones', 'foto', 'credito_foto'];
   EJEMPLOS.equipos.forEach(e => {
     const actual = existentes[e.id];
@@ -885,9 +770,7 @@ const EJEMPLOS = {
       "marca": "Celestron",
       "modelo": "C8",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 2,
       "componentes": "Tubo óptico; Buscador 8×50; Diagonal 1¼\"; Tapa frontal",
       "notas": "Dejar aclimatar 30 minutos antes de observar.",
       "descripcion": "Telescopio catadióptrico compacto y versátil. Es el caballito de batalla para planetas, Luna y estrellas dobles en las noches de observación pública, y sirve para astrofotografía con reductor de focal.",
@@ -903,9 +786,7 @@ const EJEMPLOS = {
       "marca": "Orion / Celestron",
       "modelo": "Newtoniano 8\" en CGEM",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 2,
       "componentes": "Tubo óptico; Montura computarizada; Trípode; Contrapesos (2); Mando; Cable de alimentación",
       "notas": "Requiere colimación periódica del espejo.",
       "descripcion": "Reflector newtoniano luminoso sobre montura ecuatorial computarizada que localiza y sigue los objetos automáticamente. Ideal para cielo profundo y para iniciar en astrofotografía.",
@@ -921,9 +802,7 @@ const EJEMPLOS = {
       "marca": "Sky-Watcher",
       "modelo": "Dobson 10\"",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Tubo óptico; Base dobsoniana; Buscador; Ocular 25 mm",
       "notas": "Se transporta en dos partes: tubo y base.",
       "descripcion": "Gran abertura con montaje sencillo de mover a mano. Muestra galaxias, nebulosas y cúmulos con mucho detalle; es el favorito de los estudiantes en las salidas a cielo oscuro.",
@@ -939,9 +818,7 @@ const EJEMPLOS = {
       "marca": "Sky-Watcher",
       "modelo": "Skymax 150",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Tubo óptico; Buscador; Diagonal; Ocular 28 mm",
       "notas": "",
       "descripcion": "Telescopio de gran distancia focal y alto contraste, muy estable en colimación. Excelente para planetas, Luna y estrellas dobles; liviano para llevar a colegios.",
@@ -957,9 +834,7 @@ const EJEMPLOS = {
       "marca": "Coronado",
       "modelo": "PST",
       "serie": "",
-      "nivel_control": "restringido",
       "estado": "disponible",
-      "max_dias": 1,
       "componentes": "Telescopio solar; Ocular 20 mm; Estuche",
       "notas": "Solo personal capacitado. Nunca reemplazar el ocular ni el filtro durante la observación.",
       "descripcion": "Telescopio dedicado a observar el Sol en la línea H-alfa: muestra protuberancias, filamentos y fáculas de forma segura. Se usa en jornadas diurnas de divulgación. La foto es una imagen del Sol tomada con un filtro H-alfa.",
@@ -975,9 +850,7 @@ const EJEMPLOS = {
       "marca": "Vixen",
       "modelo": "GP-DX",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 2,
       "componentes": "Cabezal; Trípode; Contrapesos (2); Motor de seguimiento; Controlador",
       "notas": "Alinear con el polo celeste antes de usar.",
       "descripcion": "Montura ecuatorial con seguimiento motorizado para tubos medianos. Permite seguir los objetos durante la observación y hacer astrofotografía de exposición corta.",
@@ -993,9 +866,7 @@ const EJEMPLOS = {
       "marca": "Velbon",
       "modelo": "Sherpa 600R",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 5,
       "componentes": "Trípode; Rótula; Zapata",
       "notas": "",
       "descripcion": "Trípode para cámaras y binoculares. Útil para fotografía de paisaje nocturno, lluvias de meteoros y timelapses del cielo.",
@@ -1011,9 +882,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "CCD monocromática refrigerada",
       "serie": "",
-      "nivel_control": "restringido",
       "estado": "disponible",
-      "max_dias": 2,
       "componentes": "Cámara; Cable USB; Fuente 12 V; Rueda de filtros; Estuche",
       "notas": "Guardar con desecante.",
       "descripcion": "Cámara de investigación para fotometría y astrometría con filtros. Su sensor se refrigera para reducir el ruido térmico. Uso en prácticas avanzadas y proyectos de grado. La foto muestra un sensor CCD de referencia.",
@@ -1029,9 +898,7 @@ const EJEMPLOS = {
       "marca": "Canon",
       "modelo": "EOS 7D",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Cuerpo; Batería (2); Cargador; Tarjeta SD; Adaptador T2; Disparador",
       "notas": "",
       "descripcion": "Cámara réflex para astrofotografía de gran campo y, con adaptador T2, a foco primo del telescopio. También se usa para registrar eventos de divulgación.",
@@ -1047,9 +914,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "Webcam adaptada",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Cámara; Adaptador 1¼\"; Cable USB",
       "notas": "",
       "descripcion": "Cámara de video para planetas y Luna: graba miles de cuadros que luego se apilan para obtener imágenes nítidas. Ideal para prácticas de procesamiento de imágenes.",
@@ -1065,9 +930,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "Red de 100 líneas/mm",
       "serie": "",
-      "nivel_control": "restringido",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Red de difracción en montura 1¼\"; Estuche",
       "notas": "No tocar la superficie de la red.",
       "descripcion": "Red de difracción que se enrosca como un filtro delante de la cámara y produce el espectro de estrellas brillantes. Permite clasificar estrellas e identificar líneas de absorción en prácticas de astrofísica.",
@@ -1083,9 +946,7 @@ const EJEMPLOS = {
       "marca": "Varias",
       "modelo": "",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Ocular 32 mm; Ocular 25 mm; Ocular 10 mm; Ocular 6 mm; Barlow 2×; Filtro lunar; Filtros de color (4)",
       "notas": "Contar los oculares al devolver el estuche.",
       "descripcion": "Juego de oculares para obtener distintos aumentos con cualquier telescopio del observatorio, con lente Barlow y filtros para Luna y planetas.",
@@ -1101,9 +962,7 @@ const EJEMPLOS = {
       "marca": "Celestron",
       "modelo": "SkyMaster 15×70",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 3,
       "componentes": "Binoculares; Adaptador para trípode; Tapas; Estuche",
       "notas": "",
       "descripcion": "Binoculares de gran apertura para recorrer la Vía Láctea, cúmulos y cometas. Con el adaptador se montan en el trípode fotográfico.",
@@ -1119,9 +978,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "Láser 532 nm",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 1,
       "componentes": "Puntero; Baterías (2)",
       "notas": "Uso exclusivo de monitores capacitados. Nunca apuntar a personas, vehículos ni aeronaves.",
       "descripcion": "Puntero para señalar estrellas y constelaciones durante las charlas al aire libre.",
@@ -1137,9 +994,7 @@ const EJEMPLOS = {
       "marca": "Lenovo",
       "modelo": "ThinkPad T430",
       "serie": "",
-      "nivel_control": "supervisado",
       "estado": "disponible",
-      "max_dias": 5,
       "componentes": "Portátil; Cargador; Mouse",
       "notas": "No instalar programas sin autorización del laboratorio.",
       "descripcion": "Computador con el software de control de telescopios, cámaras y procesamiento de imágenes instalado y probado con los equipos del observatorio.",
@@ -1155,9 +1010,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 7,
       "componentes": "Planetario mecánico; Manivela; Guía del monitor",
       "notas": "",
       "descripcion": "Modelo mecánico del sistema solar que muestra el movimiento de los planetas alrededor del Sol. Muy usado en visitas de colegios para explicar años, estaciones y órbitas.",
@@ -1173,9 +1026,7 @@ const EJEMPLOS = {
       "marca": "Philips",
       "modelo": "",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 7,
       "componentes": "Planisferios (15); Guía de uso",
       "notas": "Contar las unidades al devolver.",
       "descripcion": "Mapas giratorios del cielo para aprender a reconocer constelaciones en cualquier fecha y hora. Se entregan a los participantes en talleres de observación.",
@@ -1191,9 +1042,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 7,
       "componentes": "Globo; Base",
       "notas": "",
       "descripcion": "Esfera con las constelaciones, la eclíptica y el ecuador celeste. Ayuda a explicar coordenadas celestes y el movimiento aparente del cielo.",
@@ -1209,9 +1058,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "Norma ISO 12312-2",
       "serie": "",
-      "nivel_control": "libre",
       "estado": "disponible",
-      "max_dias": 7,
       "componentes": "Gafas (50); Caja",
       "notas": "Revisar que no tengan rayones ni agujeros antes de cada uso.",
       "descripcion": "Gafas con filtro solar certificado para observar eclipses y manchas solares a simple vista de forma segura en jornadas de divulgación.",
@@ -1227,9 +1074,7 @@ const EJEMPLOS = {
       "marca": "",
       "modelo": "",
       "serie": "",
-      "nivel_control": "restringido",
       "estado": "disponible",
-      "max_dias": 2,
       "componentes": "Estuche; Muestras (6); Lupa; Fichas descriptivas",
       "notas": "Manipular con guantes. Contar las muestras al devolver.",
       "descripcion": "Muestras reales de meteoritos (condritas, hierros y un fragmento de Cheliábinsk) para exposiciones y clases sobre el origen del sistema solar.",
@@ -1332,7 +1177,6 @@ function buscarEquipo_(id) {
   if (!eq) throw new ErrorApp('No existe un equipo con el código ' + codigo + '.', 404);
   eq.id = String(eq.id).trim();
   eq.estado = String(eq.estado || 'disponible').trim().toLowerCase();
-  eq.nivel_control = String(eq.nivel_control || 'libre').trim().toLowerCase();
   return eq;
 }
 
@@ -1388,8 +1232,7 @@ function exigirResponsable_(s, eq) {
 function equipoPublico_(eq, lab) {
   return {
     id: eq.id, nombre: eq.nombre, categoria: eq.categoria, marca: eq.marca, modelo: eq.modelo,
-    laboratorio: lab.nombre, ubicacion: lab.ubicacion, nivel_control: eq.nivel_control,
-    estado: eq.estado, max_dias: Number(eq.max_dias) || CONFIG.MAX_DIAS_POR_DEFECTO,
+    laboratorio: lab.nombre, ubicacion: lab.ubicacion, estado: eq.estado, dias_max: CONFIG.DIAS_MAX_PRESTAMO,
     componentes: String(eq.componentes || '').split(/\s*[;\n]\s*/).filter(String), notas: eq.notas || '',
     descripcion: String(eq.descripcion || ''), especificaciones: String(eq.especificaciones || ''),
     foto: urlFoto_(eq.foto), credito_foto: String(eq.credito_foto || '')
@@ -1412,7 +1255,7 @@ function prestamoPublico_(p, eq) {
   return {
     id: p.id, lote_id: p.lote_id || p.id, equipo_id: p.equipo_id, equipo_nombre: eq ? eq.nombre : p.equipo_id,
     nombre: p.nombre, email: p.email, proposito: p.proposito, descripcion: p.descripcion,
-    curso_proyecto: p.curso_proyecto, lugar_uso: p.lugar_uso, avalista_email: p.avalista_email,
+    avalista_email: p.avalista_email,
     fecha_solicitud: iso_(p.fecha_solicitud), fecha_salida: iso_(p.fecha_salida),
     fecha_prevista: iso_(p.fecha_prevista), fecha_devolucion: iso_(p.fecha_devolucion),
     estado: p.estado, vencido: estaVencido_(p), condicion_devolucion: p.condicion_devolucion || '',
@@ -1426,14 +1269,14 @@ function detalleSalida_(items, devolucion) {
   const fila = (k, v) => v ? '<tr><td style="color:#666;padding:3px 12px 3px 0">' + k + '</td><td>' + esc_(v) + '</td></tr>' : '';
   const datos = '<table style="border-collapse:collapse;margin-bottom:12px">' +
     fila('Responsable', p.nombre + ' · ' + p.email) + fila('Propósito', p.proposito) +
-    fila('Actividad', p.descripcion) + fila('Curso / proyecto', p.curso_proyecto) + fila('Lugar de uso', p.lugar_uso) +
-    fila('Devolución prevista', fechaTexto_(p.fecha_prevista)) + fila('Salida', p.lote_id) + '</table>';
+    fila('Actividad', p.descripcion) + fila('Devolver a más tardar', fechaDia_(p.fecha_prevista)) +
+    fila('Número de salida', p.lote_id) + '</table>';
   const celda = 'style="border-bottom:1px solid #ddd;padding:4px 10px 4px 0;text-align:left"';
   const equipos = '<table style="border-collapse:collapse"><tr><th ' + celda + '>Equipo</th><th ' + celda + '>Código</th><th ' +
     celda + '>' + (devolucion ? 'Estado entregado' : 'Situación') + '</th></tr>' +
     items.map(i => '<tr><td ' + celda + '>' + esc_(i.eq.nombre) + '</td><td ' + celda + '>' + esc_(i.eq.id) + '</td><td ' + celda + '>' +
       esc_(devolucion ? i.p.condicion_devolucion + (i.p.obs_devolucion ? ' — ' + i.p.obs_devolucion : '')
-        : (i.p.estado === 'pendiente' ? 'pendiente de aprobación' : 'salió ' + fechaTexto_(i.p.fecha_salida))) +
+        : 'salió ' + fechaTexto_(i.p.fecha_salida)) +
       '</td></tr>').join('') + '</table>';
   return datos + equipos;
 }
@@ -1533,6 +1376,18 @@ function iso_(v) {
 function fechaTexto_(v) {
   const t = fechaNum_(v);
   return t ? Utilities.formatDate(new Date(t), 'America/Bogota', "dd/MM/yyyy 'a las' h:mm a") : '';
+}
+
+/** «viernes 13 de noviembre», para fechas de devolución por día. */
+function fechaDia_(v) {
+  const t = fechaNum_(v);
+  if (!t) return '';
+  const d = new Date(t);
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre',
+    'octubre', 'noviembre', 'diciembre'];
+  const p = Utilities.formatDate(d, CONFIG.ZONA_HORARIA, 'u-d-M').split('-').map(Number);
+  return dias[p[0] % 7] + ' ' + p[1] + ' de ' + meses[p[2] - 1];
 }
 
 function estaVencido_(p) {

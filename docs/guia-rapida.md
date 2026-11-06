@@ -7,8 +7,8 @@
 1. Escanee el QR del equipo con la cámara del celular.
 2. Toque **Prestar este equipo**.
 3. La primera vez: escriba su correo, copie el código que le llega y complete sus datos.
-4. Diga para qué lo va a usar y cuándo lo devuelve, revise que esté completo y toque **Registrar préstamo**.
-5. Le llega el comprobante por correo.
+4. Diga para qué lo va a usar, la actividad y qué día lo devuelve (hasta 7 días calendario), y toque **Registrar préstamo**. Queda activo de inmediato, sin aprobación.
+5. Le llega el comprobante por correo y el laboratorio recibe el aviso.
 
 **Sacar varios equipos para una misma actividad**
 
@@ -25,7 +25,6 @@
 
 **Bueno saber**
 
-- Equipos marcados como «Requiere aprobación»: su solicitud la aprueba el responsable del laboratorio cuando le entrega el equipo.
 - Si viene de otra institución, necesitará el correo de un docente o funcionario de la universidad que sea su avalista.
 - Durante la observación, active **Luz roja** (botón de la luna) para no perder la adaptación a la oscuridad.
 - En «Mis préstamos» ve lo que tiene a su cargo y su historial.
@@ -33,9 +32,10 @@
 
 ## Para el responsable del laboratorio
 
-- Recibe un correo cuando alguien solicita un equipo restringido, cuando sale un equipo supervisado, cuando devuelven algo que debe revisar y cuando reportan un daño. Cada mañana recibe la lista de préstamos vencidos.
-- Desde **Panel** (arriba, al iniciar sesión) aprueba o rechaza solicitudes, verifica devoluciones y cierra reportes de daño. Los equipos de una misma salida aparecen juntos y se aprueban o verifican con un solo botón.
-- Si alguien le entrega un equipo en la mano, escanee el QR y toque **Registrar la devolución**: queda verificada en el acto.
+- No tiene que aprobar nada. Recibe un correo cada vez que alguien presta o devuelve equipos de su laboratorio, y cuando reportan un daño. Cada mañana recibe la lista de préstamos vencidos.
+- En **Panel** (arriba, al iniciar sesión) ve los vencidos, las novedades, lo que está prestado y los movimientos de la semana.
+- Si un equipo vuelve dañado o incompleto, queda en mantenimiento. Cuando esté arreglado, toque **Marcar resuelta** en el panel y elija dejarlo disponible.
+- Si alguien le entrega un equipo en la mano, escanee el QR y toque **Registrar la devolución**.
 - Para enviar un equipo a mantenimiento o darlo de baja, cambie su `estado` en la hoja `Equipos`.
 
 ## Para el administrador

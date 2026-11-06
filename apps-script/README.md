@@ -67,6 +67,8 @@ Cada vez que cambie `Code.gs` en el repositorio:
 
 Si se omite el paso 4, la web sigue hablando con la versión anterior.
 
+Las hojas creadas con versiones anteriores pueden conservar columnas que ya no se usan (por ejemplo `nivel_control`, `max_dias`, `lugar_uso`, `aprobado_por`). El sistema las ignora; se pueden dejar o borrar.
+
 Para sincronizar con este repositorio desde la terminal se puede usar [`clasp`](https://github.com/google/clasp): `clasp clone <id-del-script>` en esta carpeta y luego `clasp push`.
 
 ## Pruebas automáticas

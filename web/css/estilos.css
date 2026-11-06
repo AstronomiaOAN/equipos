@@ -645,3 +645,8 @@ button:disabled { opacity: 0.6; cursor: progress; }
   .fila-filtros { grid-column: 2; grid-row: 1; flex-wrap: nowrap; }
   .chips { grid-column: 1 / -1; flex-wrap: wrap; overflow: visible; }
 }
+
+/* Atajos para elegir el día de devolución */
+.atajos { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.6rem; }
+.atajos .chip { min-height: 2.6rem; }
+input[type=date] { max-width: 16rem; }

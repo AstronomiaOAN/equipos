@@ -3,18 +3,14 @@
 export const CATALOGOS = {
   propositos: ['Docencia (clase)', 'Práctica de laboratorio', 'Investigación / tesis',
     'Observación astronómica', 'Divulgación / evento público', 'Mantenimiento o calibración', 'Otro'],
-  lugares: ['Dentro del OAN', 'Campus universitario', 'Fuera del campus'],
   tipos_usuario: ['Estudiante de pregrado', 'Estudiante de posgrado', 'Docente', 'Investigador',
     'Personal técnico o administrativo', 'Externo'],
   condiciones: ['Bueno', 'Con detalles menores', 'Dañado', 'Incompleto'],
   tipos_incidencia: ['Daño', 'Faltante', 'Falla de funcionamiento', 'Requiere calibración', 'Otro']
 };
 
-export const NIVELES = {
-  libre: 'Préstamo directo con el QR',
-  supervisado: 'Préstamo directo; el laboratorio revisa la devolución',
-  restringido: 'Requiere aprobación del responsable'
-};
+// Plazo máximo de un préstamo en días calendario. Debe coincidir con DIAS_MAX_PRESTAMO en Code.gs.
+export const DIAS_MAX_PRESTAMO = 7;
 
 export const ESTADOS_EQUIPO = {
   disponible: 'Disponible',
@@ -27,7 +23,7 @@ export const ESTADOS_EQUIPO = {
 
 export const ESTADOS_PRESTAMO = {
   pendiente: 'Pendiente de aprobación',
-  activo: 'En curso',
+  activo: 'Prestado',
   por_verificar: 'Devuelto, por verificar',
   devuelto: 'Devuelto',
   rechazado: 'No aprobado',
@@ -68,9 +64,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Celestron",
     "modelo": "C8",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 2,
     "componentes": [
       "Tubo óptico",
       "Buscador 8×50",
@@ -91,9 +85,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Orion / Celestron",
     "modelo": "Newtoniano 8\" en CGEM",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 2,
     "componentes": [
       "Tubo óptico",
       "Montura computarizada",
@@ -116,9 +108,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Sky-Watcher",
     "modelo": "Dobson 10\"",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Tubo óptico",
       "Base dobsoniana",
@@ -139,9 +129,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Sky-Watcher",
     "modelo": "Skymax 150",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Tubo óptico",
       "Buscador",
@@ -162,9 +150,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Coronado",
     "modelo": "PST",
     "serie": "",
-    "nivel_control": "restringido",
     "estado": "disponible",
-    "max_dias": 1,
     "componentes": [
       "Telescopio solar",
       "Ocular 20 mm",
@@ -184,9 +170,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Vixen",
     "modelo": "GP-DX",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 2,
     "componentes": [
       "Cabezal",
       "Trípode",
@@ -208,9 +192,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Velbon",
     "modelo": "Sherpa 600R",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 5,
     "componentes": [
       "Trípode",
       "Rótula",
@@ -230,9 +212,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "CCD monocromática refrigerada",
     "serie": "",
-    "nivel_control": "restringido",
     "estado": "disponible",
-    "max_dias": 2,
     "componentes": [
       "Cámara",
       "Cable USB",
@@ -254,9 +234,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Canon",
     "modelo": "EOS 7D",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Cuerpo",
       "Batería (2)",
@@ -279,9 +257,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "Webcam adaptada",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Cámara",
       "Adaptador 1¼\"",
@@ -301,9 +277,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "Red de 100 líneas/mm",
     "serie": "",
-    "nivel_control": "restringido",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Red de difracción en montura 1¼\"",
       "Estuche"
@@ -322,9 +296,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Varias",
     "modelo": "",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Ocular 32 mm",
       "Ocular 25 mm",
@@ -348,9 +320,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Celestron",
     "modelo": "SkyMaster 15×70",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 3,
     "componentes": [
       "Binoculares",
       "Adaptador para trípode",
@@ -371,9 +341,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "Láser 532 nm",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 1,
     "componentes": [
       "Puntero",
       "Baterías (2)"
@@ -392,9 +360,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Lenovo",
     "modelo": "ThinkPad T430",
     "serie": "",
-    "nivel_control": "supervisado",
     "estado": "disponible",
-    "max_dias": 5,
     "componentes": [
       "Portátil",
       "Cargador",
@@ -414,9 +380,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 7,
     "componentes": [
       "Planetario mecánico",
       "Manivela",
@@ -436,9 +400,7 @@ export const EQUIPOS_DEMO = [
     "marca": "Philips",
     "modelo": "",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 7,
     "componentes": [
       "Planisferios (15)",
       "Guía de uso"
@@ -457,9 +419,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 7,
     "componentes": [
       "Globo",
       "Base"
@@ -478,9 +438,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "Norma ISO 12312-2",
     "serie": "",
-    "nivel_control": "libre",
     "estado": "disponible",
-    "max_dias": 7,
     "componentes": [
       "Gafas (50)",
       "Caja"
@@ -499,9 +457,7 @@ export const EQUIPOS_DEMO = [
     "marca": "",
     "modelo": "",
     "serie": "",
-    "nivel_control": "restringido",
     "estado": "disponible",
-    "max_dias": 2,
     "componentes": [
       "Estuche",
       "Muestras (6)",

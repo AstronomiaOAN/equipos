@@ -10,7 +10,7 @@ Hay cuatro caminos realistas. Difieren en costo, tiempo de puesta en marcha y cu
 | **Muestra el estado del equipo al escanear** | No | Sí | Sí | Sí |
 | **Evita prestar un equipo ya prestado** | No | Sí | Sí | Sí |
 | **Devolución con el mismo QR** | Parcial (un segundo formulario) | Sí | Sí | Sí |
-| **Aprobación y verificación** | No | Sí | Parcial | Sí |
+| **Avisos al laboratorio en cada préstamo y devolución** | Con scripts adicionales | Sí | Sí | Sí |
 | **Alertas de vencimiento** | Con scripts adicionales | Sí, diarias por correo | Sí | Sí |
 | **Reservas por fecha** | No | No (fase 3) | Limitadas | Sí |
 | **Límite práctico** | Unos pocos miles de registros | Decenas de miles de préstamos | Sin límite práctico | Sin límite práctico |
@@ -21,11 +21,11 @@ Hay cuatro caminos realistas. Difieren en costo, tiempo de puesta en marcha y cu
 Empezar con la **opción B**, que es la que implementa este repositorio:
 
 - No necesita servidor ni licencias: la web se publica gratis en GitHub Pages y los datos quedan en una hoja de Google de la cuenta institucional del OAN, que el personal ya sabe usar.
-- Cubre el flujo completo (préstamo, devolución, aprobación, verificación, daños, alertas) desde el primer día.
+- Cubre el flujo completo (préstamo, devolución, avisos, daños, vencimientos) desde el primer día.
 - El modelo de datos es el mismo que el de la [fase 3](10-plan-de-implementacion.md) ([`db/schema.sql`](../db/schema.sql)): si el uso crece, la migración a PostgreSQL es exportar cada hoja a CSV e importarla, y la web solo cambia la URL del servidor.
 
 La opción C (Snipe-IT) conviene si la universidad ya administra servidores y quiere unificar el inventario de todo el OAN, no solo los préstamos. La opción D tiene sentido cuando se necesiten reservas por noche de observación, integración con los cursos o autenticación con el directorio institucional.
 
 ## ¿Por qué no guardar los datos en GitHub?
 
-GitHub aloja muy bien el **código**, la **documentación** y la **página web**. Pero los préstamos contienen datos personales (nombre, correo, teléfono), y un repositorio no es una base de datos: no controla quién ve cada registro, no tiene bloqueos para que dos personas no presten el mismo equipo a la vez, y todo cambio queda en el historial público para siempre. Por eso los datos viven en una hoja de Google con acceso restringido, y la web pública solo muestra el estado del equipo.
+GitHub aloja muy bien el **código**, la **documentación** y la **página web**. Pero los préstamos contienen datos personales (nombre, correo), y un repositorio no es una base de datos: no controla quién ve cada registro, no tiene bloqueos para que dos personas no presten el mismo equipo a la vez, y todo cambio queda en el historial público para siempre. Por eso los datos viven en una hoja de Google con acceso restringido, y la web pública solo muestra el estado del equipo.

@@ -24,14 +24,14 @@ Las fechas son de referencia: el piloto puede empezar en cuanto se defina el lab
 ## Fase 1 · Piloto en un laboratorio (4–5 semanas)
 
 1. **Instalar** el backend y conectar la web siguiendo [`apps-script/README.md`](../apps-script/README.md) (una tarde).
-2. **Inventariar** los equipos del laboratorio piloto en la hoja `Equipos`, empezando por los que más se prestan. Decidir con el responsable el `nivel_control` y el `max_dias` de cada uno.
+2. **Inventariar** los equipos del laboratorio piloto en la hoja `Equipos`, empezando por los que más se prestan. Agregar foto, descripción y lo que incluye cada uno.
 3. **Imprimir y pegar** las etiquetas ([guía](04-codigos-qr-y-etiquetas.md)).
 4. **Capacitar** a los responsables con la [guía rápida](guia-rapida.md) y la web en modo demostración.
 5. **Piloto** con un curso o grupo durante dos semanas. Medir: ¿cuánto tarda un préstamo?, ¿cuántas salidas no se registraron?, ¿qué campos sobran o faltan?
 
 ## Fase 2 · Todos los laboratorios (3 semanas)
 
-1. Ajustar formularios, plazos y niveles con lo aprendido.
+1. Ajustar formularios y plazos con lo aprendido.
 2. Inventario y etiquetas del resto de laboratorios.
 3. Divulgación: correo a estudiantes y docentes, aviso en los laboratorios con un QR general a la página de inicio, y la regla de que **ningún equipo sale sin escanear su QR**.
 4. Instalar la alerta diaria y revisar el panel cada semana.

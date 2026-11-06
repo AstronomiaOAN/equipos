@@ -26,7 +26,6 @@ def equipos():
     salida = []
     for e in leer('equipos_ejemplo.csv'):
         e = {k: (v or '').strip() for k, v in e.items()}
-        e['max_dias'] = int(e['max_dias'] or 7)
         salida.append(e)
     return salida
 

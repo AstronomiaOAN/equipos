@@ -49,7 +49,7 @@ La web y el backend se comunican con peticiones `POST` cuyo cuerpo es JSON envia
 | Inyección de HTML en correos y en la web | Todo dato de usuario se escapa antes de mostrarse |
 | Acceso a la hoja | La hoja se comparte **solo** con administradores y responsables. El Apps Script se publica «ejecutar como: yo» y no da acceso a la hoja |
 | Pérdida de datos | El historial de versiones de Google conserva los cambios; se recomienda una copia mensual (Archivo → Hacer una copia) |
-| Datos de más | Solo se piden nombre, vinculación, dependencia y, opcionalmente, celular. No se piden documento de identidad ni dirección |
+| Datos de más | Solo se piden nombre y vinculación con la universidad. No se piden documento de identidad, teléfono ni dirección |
 
 ## Ley 1581 de 2012 (protección de datos personales)
 

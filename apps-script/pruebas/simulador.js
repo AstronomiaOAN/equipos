@@ -96,7 +96,16 @@ function crearEntorno() {
       base64DecodeWebSafe: s => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
       newBlob: buf => ({ getDataAsString: () => Buffer.from(buf).toString('utf8') }),
       getUuid: () => crypto.randomUUID(),
-      formatDate: (fecha, zona, formato) => fecha.toISOString().slice(0, 16)
+      // Hora de Colombia (UTC−5, sin horario de verano) con los patrones que usa Code.gs
+      formatDate: (fecha, zona, formato) => {
+        const b = new Date(fecha.getTime() - 5 * 36e5);
+        const dos = n => String(n).padStart(2, '0');
+        const Y = b.getUTCFullYear(), M = b.getUTCMonth() + 1, D = b.getUTCDate();
+        if (formato === 'yyyy-MM-dd') return `${Y}-${dos(M)}-${dos(D)}`;
+        if (formato === 'yyMMdd') return `${String(Y).slice(2)}${dos(M)}${dos(D)}`;
+        if (formato === 'u-d-M') return `${b.getUTCDay() || 7}-${D}-${M}`;
+        return b.toISOString().slice(0, 16);
+      }
     }
   };
   vm.createContext(contexto);

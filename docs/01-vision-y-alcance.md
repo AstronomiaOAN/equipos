@@ -11,7 +11,7 @@ Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el Q
 ## Objetivos
 
 1. Saber en todo momento dónde está cada equipo y quién responde por él.
-2. Registrar para qué se usa (docencia, práctica, investigación, observación, divulgación, mantenimiento) y asociarlo a un curso o proyecto.
+2. Registrar para qué se usa (docencia, práctica, investigación, observación, divulgación, mantenimiento) y la actividad.
 3. Detectar préstamos vencidos y equipos con daños o faltantes, y avisar automáticamente.
 4. Tener el historial de uso de cada equipo para planear mantenimiento, calibración y compras.
 5. Que registrar un préstamo tome **menos de un minuto**; si es engorroso, la gente no lo hará.
@@ -19,7 +19,7 @@ Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el Q
 ## Qué cubre
 
 - Equipos y materiales inventariables de los laboratorios del OAN: telescopios y tubos ópticos, monturas, cámaras, espectrógrafos y fotómetros, oculares y filtros, computadores, instrumentos de medición, kits de divulgación.
-- Préstamo y devolución de uno o varios equipos a la vez («salidas»), aprobación, verificación y reporte de daños.
+- Préstamo y devolución de uno o varios equipos a la vez («salidas»), **inmediatos y sin aprobación**, con aviso al laboratorio, y reporte de daños.
 - Un **catálogo público de equipos** con foto, descripción, características y disponibilidad, para que estudiantes y docentes sepan qué hay antes de pedirlo.
 - Alertas por correo y un panel para los responsables.
 
@@ -34,20 +34,13 @@ Cada equipo lleva una **etiqueta con un código QR**. Quien lo saca escanea el Q
 | Rol | Quién | Qué puede hacer |
 | --- | --- | --- |
 | Usuario | Estudiantes, docentes, investigadores, personal de divulgación (correo `@unal.edu.co`) | Escanear un QR, prestar y devolver, reportar daños, ver sus préstamos |
-| Usuario externo | Visitantes o colaboradores de otras instituciones (correo personal) | Lo mismo, pero cada préstamo necesita un **avalista** con correo institucional y la **aprobación** del responsable |
-| Responsable de laboratorio | Técnico o docente a cargo de un laboratorio | Aprobar o rechazar solicitudes, verificar devoluciones, cerrar reportes de daño, ver el panel de su laboratorio |
+| Usuario externo | Visitantes o colaboradores de otras instituciones (correo personal) | Lo mismo, indicando un **avalista** con correo institucional |
+| Responsable de laboratorio | Técnico o docente a cargo de un laboratorio | Recibir los avisos de préstamos y devoluciones, registrar devoluciones que le entreguen en mano, cerrar reportes de daño, ver el panel de su laboratorio |
 | Administrador | Coordinación del OAN o encargado de inventario | Todo lo anterior en todos los laboratorios; dar de alta equipos, imprimir etiquetas, asignar responsables |
 
-## Nivel de control de cada equipo
+## Reglas básicas
 
-No todos los equipos necesitan el mismo cuidado. Cada uno tiene un nivel:
-
-| Nivel | Cómo funciona | Ejemplos |
-| --- | --- | --- |
-| **Libre** | Se presta y se devuelve solo con el QR | Kits de divulgación, oculares básicos, refractores pequeños |
-| **Supervisado** | Se presta con el QR; el responsable recibe aviso de la salida y revisa la devolución antes de volver a prestarlo | Telescopios grandes, monturas, portátiles |
-| **Restringido** | El QR crea una solicitud; el responsable la aprueba al entregar el equipo y revisa la devolución | Cámaras científicas, espectrógrafos, instrumentos calibrados |
-
-En una salida con equipos de distintos niveles, cada equipo sigue su propia regla: los libres y supervisados salen de inmediato y los restringidos quedan esperando la aprobación, sin que la persona tenga que llenar dos formularios.
-
-Además, **cualquier préstamo de un usuario externo o para usar fuera del campus requiere aprobación**, sin importar el nivel del equipo (esto se puede cambiar en la configuración).
+- **Sin aprobaciones:** el préstamo queda activo en el momento en que se registra, y la devolución también; los responsables del laboratorio reciben un aviso por correo y lo ven en su panel.
+- **Plazo:** de hoy hasta **7 días calendario**; el equipo se devuelve a más tardar el día elegido.
+- **Pocos datos:** nombre y vinculación (solo la primera vez), para qué se usa, la actividad y el día de devolución.
+- Si un equipo se devuelve dañado o incompleto, queda en mantenimiento hasta que el responsable resuelva la novedad.

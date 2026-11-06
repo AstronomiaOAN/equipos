@@ -6,7 +6,7 @@ Al registrarse en el sistema de préstamo de equipos de los laboratorios del Obs
 
 **Responsable del tratamiento:** Universidad Nacional de Colombia — Observatorio Astronómico Nacional. Contacto: *[correo del OAN por definir]*.
 
-**Datos que se recogen:** nombre, correo electrónico, tipo de vinculación con la universidad, programa o dependencia, número de celular (opcional) y el registro de los préstamos (equipo, propósito, fechas y estado del equipo).
+**Datos que se recogen:** nombre, correo electrónico, tipo de vinculación con la universidad y el registro de los préstamos (equipo, propósito, fechas y estado del equipo).
 
 **Finalidades:**
 

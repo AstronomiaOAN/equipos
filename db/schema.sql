@@ -5,9 +5,8 @@
 -- para que la migración sea una importación de CSV por tabla.
 -- ============================================================================
 
-CREATE TYPE nivel_control    AS ENUM ('libre', 'supervisado', 'restringido');
-CREATE TYPE estado_equipo    AS ENUM ('disponible', 'reservado', 'prestado', 'en_revision', 'mantenimiento', 'baja');
-CREATE TYPE estado_prestamo  AS ENUM ('pendiente', 'activo', 'por_verificar', 'devuelto', 'rechazado', 'cancelado');
+CREATE TYPE estado_equipo    AS ENUM ('disponible', 'prestado', 'mantenimiento', 'baja');
+CREATE TYPE estado_prestamo  AS ENUM ('activo', 'devuelto');
 CREATE TYPE rol_usuario      AS ENUM ('usuario', 'responsable', 'admin');
 CREATE TYPE estado_incidencia AS ENUM ('abierta', 'cerrada');
 
@@ -21,8 +20,6 @@ CREATE TABLE usuarios (
     email          text PRIMARY KEY CHECK (email = lower(email)),
     nombre         text NOT NULL,
     tipo           text NOT NULL,                -- Estudiante de pregrado, Docente, Externo…
-    dependencia    text,
-    telefono       text,
     rol            rol_usuario NOT NULL DEFAULT 'usuario',
     activo         boolean NOT NULL DEFAULT true,
     acepta_datos   timestamptz NOT NULL,         -- fecha de aceptación (Ley 1581 de 2012)
@@ -45,11 +42,13 @@ CREATE TABLE equipos (
     modelo         text,
     serie          text,
     placa_inventario text,                       -- número de inventario de la universidad
-    nivel_control  nivel_control NOT NULL DEFAULT 'libre',
     estado         estado_equipo NOT NULL DEFAULT 'disponible',
-    max_dias       integer NOT NULL DEFAULT 7 CHECK (max_dias BETWEEN 1 AND 180),
     componentes    text[] NOT NULL DEFAULT '{}',
     notas          text,
+    descripcion    text,
+    especificaciones text,
+    foto           text,
+    credito_foto   text,
     fecha_alta     date NOT NULL DEFAULT current_date
 );
 
@@ -62,32 +61,25 @@ CREATE TABLE prestamos (
     tipo_usuario         text NOT NULL,
     proposito            text NOT NULL,
     descripcion          text NOT NULL,
-    curso_proyecto       text,
-    lugar_uso            text NOT NULL,
     avalista_email       text,
     fecha_solicitud      timestamptz NOT NULL DEFAULT now(),
-    fecha_salida         timestamptz,
-    fecha_prevista       timestamptz NOT NULL,
+    fecha_salida         timestamptz NOT NULL DEFAULT now(),
+    fecha_prevista       timestamptz NOT NULL,   -- fin del día de devolución elegido
     fecha_devolucion     timestamptz,
     estado               estado_prestamo NOT NULL,
-    condicion_salida     text,
     condicion_devolucion text,
     obs_devolucion       text,
     componentes_ok       boolean,
     devuelto_por         text,
-    aprobado_por         text,
-    motivo_rechazo       text,
-    verificado_por       text,
-    fecha_verificacion   timestamptz,
     recordatorio_enviado timestamptz,
-    CHECK (fecha_prevista > fecha_solicitud),
-    CHECK (estado <> 'activo' OR fecha_salida IS NOT NULL),
-    CHECK (estado NOT IN ('por_verificar', 'devuelto') OR fecha_devolucion IS NOT NULL)
+    CHECK (fecha_prevista > fecha_salida),
+    CHECK (fecha_prevista < fecha_salida + interval '8 days'),   -- hasta 7 días calendario
+    CHECK (estado <> 'devuelto' OR fecha_devolucion IS NOT NULL)
 );
 
 -- Un equipo no puede tener dos préstamos abiertos al mismo tiempo.
-CREATE UNIQUE INDEX un_prestamo_abierto_por_equipo
-    ON prestamos (equipo_id) WHERE estado IN ('pendiente', 'activo', 'por_verificar');
+CREATE UNIQUE INDEX un_prestamo_activo_por_equipo
+    ON prestamos (equipo_id) WHERE estado = 'activo';
 CREATE INDEX prestamos_por_usuario ON prestamos (email, fecha_solicitud DESC);
 CREATE INDEX prestamos_por_salida ON prestamos (lote_id);
 CREATE INDEX prestamos_activos_por_vencer ON prestamos (fecha_prevista) WHERE estado = 'activo';
@@ -158,5 +150,5 @@ GROUP BY e.id;
 
 CREATE VIEW uso_por_proposito_mes AS
 SELECT date_trunc('month', fecha_salida)::date AS mes, proposito, count(*) AS prestamos
-FROM prestamos WHERE fecha_salida IS NOT NULL
+FROM prestamos
 GROUP BY 1, 2;

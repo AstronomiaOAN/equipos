@@ -16,17 +16,16 @@ Arriba hay un buscador (por nombre, código, marca o uso; no importan las tildes
 
 <img src="img/equipo.png" width="300" alt="Ficha del equipo OAN-TEL-0001 disponible, con laboratorio, modelo, condiciones de préstamo, lista de componentes y botón para prestar">
 
-Lo más grande es el código del equipo, para que la persona confirme de un vistazo que abrió el equipo que tiene en la mano. Debajo van el estado, la **foto** (con su crédito), el botón de acción, la **descripción**, la tabla de **características** y los datos de préstamo: laboratorio, condiciones y lo que incluye. Hay **un solo botón principal**, que cambia según el estado: «Prestar este equipo», «Devolver este equipo» o, para el responsable, «Aprobar y entregar» o «Revisado: queda disponible».
+Lo más grande es el código del equipo, para que la persona confirme de un vistazo que abrió el equipo que tiene en la mano. Debajo van el estado, la **foto** (con su crédito), el botón de acción, la **descripción**, la tabla de **características** y los datos de préstamo: laboratorio, condiciones y lo que incluye. Hay **un solo botón principal**, que cambia según el estado: «Prestar este equipo», «Agregar a mi salida» o «Devolver este equipo» (para el responsable, «Registrar la devolución»).
 
 ## Formulario de préstamo (uno o varios equipos)
 
 <img src="img/salida-varios-equipos.png" width="300" alt="Formulario de préstamo con tres equipos en la lista, botón para escanear otro QR y datos de la actividad">
 
 - **Equipos**: la lista de lo que sale, con «Quitar» en cada uno, el botón **Escanear otro QR** (abre la cámara dentro de la página y lee varios QR seguidos) y un campo para escribir un código.
-- **Sus datos** solo aparece la primera vez: nombre, vinculación, dependencia, celular (opcional) y la autorización de tratamiento de datos.
-- **Actividad**, una sola vez para todos los equipos: propósito, descripción, curso o proyecto, lugar de uso y fecha de devolución (limitada al plazo del equipo más restrictivo).
-- **Estado al recibirlos** y la casilla de compromiso.
-- Si algún equipo requiere aprobación, se explica cuáles; el botón dice cuántos equipos se registran.
+- **Sus datos** solo aparece la primera vez: nombre, vinculación y la autorización de tratamiento de datos.
+- **Préstamo**, una sola vez para todos los equipos: para qué (lista), la actividad en pocas palabras y el **día de devolución**, con atajos «Hoy», «Mañana», «En 3 días» y «En una semana» (máximo 7 días calendario).
+- La casilla de compromiso. No hay campos opcionales ni aprobación: al registrar, el préstamo queda activo.
 
 ## Comprobante
 
@@ -44,13 +43,13 @@ Lo que la persona tiene ahora, **agrupado por salida**, con el botón «Devolver
 
 <img src="img/devolucion-varios.png" width="300" alt="Formulario de devolución con un bloque por equipo, su estado y observaciones">
 
-Un bloque por equipo con lo que incluye, el estado en que se entrega y observaciones (obligatorias si está dañado o incompleto). Se desmarcan los equipos que todavía no se devuelven.
+Un bloque por equipo con lo que incluye y el estado en que se entrega («Bueno» por defecto). Solo si se marca «Dañado» o «Incompleto» aparece el campo para describir el problema. Se desmarcan los equipos que todavía no se devuelven.
 
 ## Panel del laboratorio
 
-<img src="img/panel-laboratorio.png" width="300" alt="Panel del responsable con solicitudes por aprobar, devoluciones por verificar y resumen de uso">
+<img src="img/panel-laboratorio.png" width="300" alt="Panel del responsable con novedades, equipos en préstamo, movimientos de la semana y resumen de uso">
 
-Solo para responsables y administradores. Las solicitudes y devoluciones de una misma salida aparecen juntas y se atienden con un botón. En orden de urgencia: solicitudes por aprobar, devoluciones por verificar, préstamos vencidos, equipos prestados, reportes de daño abiertos y un resumen de los últimos 30 días (préstamos por propósito y equipos más usados). Todas las acciones se hacen desde aquí sin abrir la hoja de cálculo.
+Solo para responsables y administradores. Es donde «llegan» los préstamos y devoluciones, además del aviso por correo. En orden: préstamos **vencidos**, **novedades** abiertas (daños y faltantes, con el botón «Marcar resuelta»), equipos **en préstamo** agrupados por salida (quién, para qué y hasta qué día), **movimientos de los últimos 7 días** y un resumen de los últimos 30 días.
 
 ## Logo
 

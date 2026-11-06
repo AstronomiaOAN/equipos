@@ -1,34 +1,26 @@
 # 3. Flujos de uso
 
-Todo empieza igual: la persona escanea el QR del equipo con la cámara del celular y se abre la ficha del equipo con su estado actual. Lo que puede hacer depende de ese estado y de quién es.
+Todo empieza igual: la persona escanea el QR de un equipo con la cámara del celular, o lo elige en el catálogo, y se abre la ficha del equipo con su estado actual. **No hay aprobaciones ni verificaciones**: el préstamo y la devolución quedan registrados en el momento, y el laboratorio recibe el aviso.
 
 ## Préstamo y devolución
 
 ```mermaid
 flowchart TD
-    A([Escanea el QR del equipo]) --> B[Se abre la ficha:<br/>código, nombre, estado, qué incluye]
+    A([Escanea el QR o elige en el catálogo]) --> B[Ficha del equipo:<br/>foto, estado, qué incluye]
     B --> C{¿Estado del equipo?}
     C -- Disponible --> D{¿Tiene sesión<br/>en este celular?}
     D -- No --> E[Escribe su correo y<br/>el código que le llega]
     E --> F
-    D -- Sí --> F[Formulario de préstamo:<br/>propósito, actividad, curso,<br/>lugar, fecha de devolución,<br/>estado al recibirlo]
-    F --> G{¿Requiere aprobación?<br/>restringido, externo o<br/>fuera del campus}
-    G -- No --> H[Préstamo activo<br/>se guarda la hora de salida]
-    G -- Sí --> I[Solicitud pendiente<br/>el equipo queda reservado]
-    I --> J{El responsable<br/>decide}
-    J -- Aprueba al entregar --> H
-    J -- Rechaza con motivo --> K([Equipo disponible de nuevo])
-    H --> L([Comprobante en pantalla y por correo])
+    D -- Sí --> F[Formulario:<br/>equipos, para qué,<br/>actividad, día de devolución]
+    F --> G[Préstamo activo<br/>se guarda la hora de salida]
+    G --> H([Comprobante en pantalla<br/>y aviso al laboratorio])
 
-    C -- En préstamo, y es suyo --> M[Formulario de devolución:<br/>lista de componentes,<br/>estado, observaciones]
-    M --> N{¿Equipo libre y<br/>en buen estado?}
-    N -- Sí --> O([Devuelto · disponible])
-    N -- No --> P[Devuelto · en revisión<br/>aviso al responsable]
-    P --> Q{El responsable revisa}
-    Q -- Todo bien --> O
-    Q -- Necesita arreglo --> R([En mantenimiento])
+    C -- Prestado a esta persona --> M[Devolución:<br/>estado de cada equipo]
+    M --> N{¿Dañado o<br/>incompleto?}
+    N -- No --> O([Devuelto · disponible<br/>aviso al laboratorio])
+    N -- Sí --> R([Devuelto · en mantenimiento<br/>novedad abierta y aviso])
 
-    C -- En préstamo, de otra persona --> S([Muestra hasta cuándo está prestado<br/>sin datos personales])
+    C -- Prestado a otra persona --> S([Muestra hasta qué día está prestado,<br/>sin datos personales])
 ```
 
 ## Varios equipos para una misma actividad (salida)
@@ -37,46 +29,40 @@ Para una práctica o una noche de observación normalmente salen varios equipos 
 
 ```mermaid
 flowchart TD
-    A([Escanea el QR del primer equipo]) --> B[Prestar este equipo]
-    B --> C[Formulario de la salida<br/>lista de equipos + datos de la actividad]
+    A([Primer equipo: QR o catálogo]) --> C[Formulario de la salida]
     C --> D{¿Falta algún equipo?}
-    D -- Sí --> E[Escanear otro QR con la cámara<br/>dentro de la página, o escribir el código]
+    D -- Sí --> E[Escanear otro QR, escribir el código<br/>o agregarlo desde el catálogo]
     E --> F{¿Está disponible?}
     F -- Sí --> G[Se agrega a la lista]
     F -- No --> H[Aviso: no se agrega]
     G --> D
     H --> D
     D -- No --> I[Registrar préstamo de N equipos]
-    I --> J[Un registro por equipo<br/>con el mismo número de salida]
-    J --> K([Un solo comprobante y un solo correo])
+    I --> J([Un registro por equipo con el mismo número de salida,<br/>un comprobante y un aviso por laboratorio])
 ```
 
-- El lector de QR dentro de la página **escanea seguido**: se apunta a un equipo, vibra al leerlo, y se apunta al siguiente sin tocar nada. También se puede escanear con la cámara normal del celular; la página recuerda la salida en preparación y ofrece «Agregar a mi salida».
+- El lector de QR dentro de la página **escanea seguido**: se apunta a un equipo, vibra al leerlo, y se apunta al siguiente.
 - Lo escrito en el formulario se conserva mientras se agregan equipos.
-- **Plazo:** la fecha de devolución no puede superar el plazo del equipo más restrictivo de la lista.
-- **Aprobación por equipo:** solo los equipos que la requieren quedan pendientes; los demás salen de inmediato. El responsable aprueba la salida con un solo botón.
-- **Devolución:** desde «Mis préstamos» o desde el QR de cualquiera de los equipos se puede devolver **toda la salida** en un formulario (estado de cada equipo) o **solo algunos** equipos; los demás siguen prestados.
+- **Devolución:** desde «Mis préstamos» o desde el QR de cualquiera de los equipos se puede devolver **toda la salida** en un formulario, o **solo algunos** equipos; los demás siguen prestados.
 - Cada equipo conserva su propio registro, así que el historial y las estadísticas por equipo siguen siendo exactos.
+
+## Plazo: días calendario
+
+- La persona elige el **día de devolución**: hoy, mañana o cualquier día hasta **7 días calendario** después (con atajos «Hoy», «Mañana», «En 3 días», «En una semana»).
+- Cuentan todos los días, también fines de semana y festivos.
+- El préstamo vence al **final de ese día** (11:59 p. m., hora de Colombia). Esa mañana llega un recordatorio; si pasa el día sin devolución, queda **vencido** y empiezan los avisos diarios.
 
 ## Estados de un préstamo
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pendiente: solicitud que requiere aprobación
-    [*] --> activo: préstamo directo
-    pendiente --> activo: el responsable aprueba y entrega
-    pendiente --> rechazado: el responsable rechaza
-    pendiente --> cancelado: el usuario cancela
-    activo --> devuelto: equipo libre, sin novedades
-    activo --> por_verificar: supervisado, restringido o con novedad
-    por_verificar --> devuelto: el responsable verifica
+    [*] --> activo: se registra el préstamo
+    activo --> devuelto: se registra la devolución
     devuelto --> [*]
-    rechazado --> [*]
-    cancelado --> [*]
 
     note right of activo
-        Si pasa la fecha prevista se marca como vencido
-        y se envían avisos diarios.
+        Pasado el día de devolución se marca como vencido
+        y se envían avisos diarios a la persona y al laboratorio.
     end note
 ```
 
@@ -85,15 +71,13 @@ stateDiagram-v2
 | Estado | Significado | Se puede prestar |
 | --- | --- | --- |
 | `disponible` | En su lugar, listo para usar | Sí |
-| `reservado` | Hay una solicitud esperando aprobación | No |
 | `prestado` | Alguien lo tiene | No |
-| `en_revision` | Fue devuelto y el responsable debe revisarlo | No |
-| `mantenimiento` | En reparación o calibración | No |
-| `baja` | Retirado del inventario (no se imprimen etiquetas) | No |
+| `mantenimiento` | Se devolvió dañado o incompleto, o está en reparación o calibración | No |
+| `baja` | Retirado del inventario (no aparece en el catálogo ni se imprimen etiquetas) | No |
 
-El estado cambia solo con los movimientos. El administrador puede cambiarlo a mano en la hoja `Equipos` (por ejemplo, enviar a mantenimiento o dar de baja).
+El estado cambia solo con los préstamos y devoluciones. Cuando el responsable marca como resuelta una novedad, puede dejar el equipo disponible otra vez. El administrador también puede cambiar el estado a mano en la hoja `Equipos`.
 
-## Qué pasa por detrás al escanear
+## Qué pasa por detrás al prestar
 
 ```mermaid
 sequenceDiagram
@@ -106,28 +90,28 @@ sequenceDiagram
     U->>W: Abre ?e=OAN-TEL-0001 desde el QR
     W->>S: equipo(id, token)
     S->>H: Lee Equipos, Laboratorios, Prestamos
-    S-->>W: Ficha del equipo y préstamo abierto (si lo hay)
+    S-->>W: Ficha del equipo y su préstamo (si lo hay)
     U->>W: Llena el formulario y confirma
-    W->>S: prestar(token, datos)
-    S->>S: Valida sesión, estado del equipo,<br/>plazo máximo y reglas
-    S->>H: Agrega fila en Prestamos,<br/>cambia estado en Equipos,<br/>anota en Bitacora
-    S->>C: Comprobante al usuario<br/>y aviso al responsable si aplica
+    W->>S: prestar(token, equipos, datos)
+    S->>S: Valida sesión, disponibilidad<br/>y día de devolución (≤ 7 días)
+    S->>H: Agrega una fila por equipo en Prestamos,<br/>los marca prestados, anota en Bitacora
+    S->>C: Comprobante al usuario<br/>y aviso a los responsables del laboratorio
     S-->>W: Préstamo registrado
-    W-->>U: Comprobante con fecha y hora
+    W-->>U: Comprobante con fecha, hora y día de devolución
 ```
 
 ## Inicio de sesión
 
-No se usan contraseñas. La primera vez, la persona escribe su correo, recibe un código de 6 dígitos y lo escribe en la página. Con eso el celular queda con una sesión firmada válida por 30 días. Así se confirma que el correo es suyo sin crear cuentas ni recordar claves. Los detalles están en [arquitectura y seguridad](09-arquitectura-y-seguridad.md).
+No se usan contraseñas. La primera vez, la persona escribe su correo, recibe un código de 6 dígitos y lo escribe en la página. Con eso el celular queda con una sesión firmada válida por 30 días. Los detalles están en [arquitectura y seguridad](09-arquitectura-y-seguridad.md).
 
 ## Situaciones especiales
 
 | Situación | Cómo se resuelve |
 | --- | --- |
 | Alguien devuelve un equipo por otra persona | El responsable del laboratorio puede registrar la devolución desde la ficha del equipo; queda anotado quién la registró (`devuelto_por`) |
-| El equipo se daña durante el préstamo | Se devuelve marcando «Dañado» y describiendo el daño; se crea un reporte y el equipo queda en revisión |
-| Faltan piezas de un kit | Se desmarcan en la lista de componentes al devolver; se crea un reporte de faltante |
+| El equipo se daña durante el préstamo | Se devuelve marcando «Dañado» y describiendo el daño; queda en mantenimiento y se abre una novedad |
+| Faltan piezas | Se marca «Incompleto» y se describe lo que falta; queda en mantenimiento y se abre una novedad |
 | Un equipo disponible tiene una falla | Cualquiera con sesión puede usar «Reportar un daño o falla» desde la ficha; el responsable recibe un correo |
-| Se necesita más tiempo | El usuario devuelve y vuelve a prestar, o el responsable ajusta la `fecha_prevista` en la hoja |
-| La etiqueta está dañada | En la página de inicio se puede escribir el código impreso; el administrador reimprime la etiqueta |
+| Se necesita más tiempo | Se devuelve y se vuelve a prestar, o el responsable ajusta la `fecha_prevista` en la hoja |
+| La etiqueta está dañada | En la página de inicio se puede escribir el código impreso, o buscar el equipo en el catálogo |
 | Sin señal en la terraza de observación | La ficha necesita conexión. Se recomienda registrar la salida dentro del edificio, donde hay red |

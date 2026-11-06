@@ -23,9 +23,7 @@ erDiagram
         text nombre
         text categoria
         text laboratorio_id FK
-        text nivel_control "libre, supervisado, restringido"
         text estado
-        int max_dias
         text componentes
         text descripcion
         text especificaciones
@@ -76,9 +74,7 @@ erDiagram
 | `categoria` | Telescopios | |
 | `laboratorio_id` | `LAB-OBS` | Debe existir en `Laboratorios` |
 | `marca`, `modelo`, `serie` | Celestron, C8, … | |
-| `nivel_control` | `supervisado` | `libre`, `supervisado` o `restringido` (lista desplegable) |
 | `estado` | `disponible` | Lo actualiza el sistema; ver [flujos](03-flujos.md#estados-de-un-equipo) |
-| `max_dias` | 2 | Plazo máximo de un préstamo. Vacío = 7 |
 | `componentes` | Tubo óptico; Buscador; Tapa | Separados por punto y coma. Se chequean al devolver |
 | `notas` | Guardar con desecante | Se muestra en la ficha |
 | `descripcion` | Telescopio catadióptrico compacto… | Uno o dos párrafos para el catálogo: qué es y para qué sirve |
@@ -100,7 +96,7 @@ erDiagram
 | Columna | Notas |
 | --- | --- |
 | `email` | Identificador; se verifica con el código enviado |
-| `nombre`, `tipo`, `dependencia`, `telefono` | Los escribe la persona. `tipo`: estudiante de pregrado o posgrado, docente, investigador, personal técnico o administrativo, externo |
+| `nombre`, `tipo` | Los escribe la persona la primera vez. `tipo`: estudiante de pregrado o posgrado, docente, investigador, personal técnico o administrativo, externo |
 | `rol` | `usuario` por defecto. Escribir `admin` para dar acceso a todos los laboratorios |
 | `activo` | Escribir `NO` para bloquear a alguien |
 | `acepta_datos` | Fecha en que autorizó el tratamiento de datos |
@@ -114,16 +110,15 @@ erDiagram
 | `equipo_id`, `email` | Quién y qué |
 | `nombre`, `tipo_usuario` | Copia al momento del préstamo, para que el historial no cambie si la persona edita su perfil |
 | `proposito` | Docencia (clase), Práctica de laboratorio, Investigación / tesis, Observación astronómica, Divulgación / evento público, Mantenimiento o calibración, Otro |
-| `descripcion`, `curso_proyecto` | Para qué exactamente |
-| `lugar_uso` | Dentro del OAN, Campus universitario, Fuera del campus |
+| `descripcion` | La actividad, en pocas palabras |
 | `avalista_email` | Solo para usuarios externos |
 | `fecha_solicitud` | Cuando se llenó el formulario |
-| `fecha_salida` | **Cuando el equipo salió**: al registrar (préstamo directo) o al aprobar (con aprobación) |
-| `fecha_prevista` | Devolución acordada; no puede pasar de `max_dias` |
+| `fecha_salida` | **Cuando el equipo salió** (al registrar el préstamo) |
+| `fecha_prevista` | Fin del día de devolución elegido (11:59 p. m.); como máximo 7 días calendario después de la salida |
 | `fecha_devolucion` | **Cuando se devolvió** |
-| `estado` | `pendiente`, `activo`, `por_verificar`, `devuelto`, `rechazado`, `cancelado` |
-| `condicion_salida`, `condicion_devolucion`, `obs_devolucion`, `componentes_ok` | Estado del equipo al salir y al volver |
-| `devuelto_por`, `aprobado_por`, `motivo_rechazo`, `verificado_por`, `fecha_verificacion` | Trazabilidad de quién hizo qué |
+| `estado` | `activo` o `devuelto` |
+| `condicion_devolucion`, `obs_devolucion`, `componentes_ok` | Estado del equipo al volver |
+| `devuelto_por` | Quién registró la devolución (la persona o un responsable) |
 | `recordatorio_enviado` | Para no repetir el aviso previo al vencimiento |
 | `lote_id` | Número de la **salida** (`L-251105-7C2D0E`): todos los equipos prestados juntos para una misma actividad comparten este valor |
 
@@ -133,10 +128,11 @@ erDiagram
 
 ### `Bitacora` — registro de auditoría
 
-Cada inicio de sesión, préstamo, aprobación, devolución y reporte queda con `fecha`, `email`, `accion` y `detalle`. No se edita a mano.
+Cada inicio de sesión, préstamo, devolución y reporte queda con `fecha`, `email`, `accion` y `detalle`. No se edita a mano.
 
 ## Reglas de integridad
 
-- Un equipo tiene **como máximo un préstamo abierto** (`pendiente`, `activo` o `por_verificar`). En la hoja lo garantiza el bloqueo de Apps Script; en PostgreSQL, un índice único parcial.
+- Un equipo tiene **como máximo un préstamo activo**. En la hoja lo garantiza el bloqueo de Apps Script; en PostgreSQL, un índice único parcial.
 - Los textos escritos por los usuarios que empiezan por `=`, `+`, `-` o `@` se guardan con un apóstrofo delante, para que la hoja no los interprete como fórmulas.
+- Las hojas creadas con versiones anteriores pueden tener columnas que ya no se usan (`nivel_control`, `max_dias`, `dependencia`, `telefono`, `curso_proyecto`, `lugar_uso`, `condicion_salida`, `aprobado_por`, `motivo_rechazo`, `verificado_por`, `fecha_verificacion`). Se pueden dejar o borrar; el sistema las ignora.
 - Se pueden agregar columnas propias al final de cualquier pestaña (por ejemplo `placa_inventario` en `Equipos`); el sistema las respeta.

@@ -2,7 +2,7 @@
 
 Sistema para registrar el préstamo y la devolución de los equipos de los laboratorios del Observatorio Astronómico Nacional (OAN) de la Universidad Nacional de Colombia.
 
-Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea con el celular, dice para qué lo va a usar y cuándo lo devuelve, y el sistema guarda la **fecha y hora de salida**. Si una actividad necesita **varios equipos**, se escanean uno tras otro en el mismo formulario y los datos de la actividad se escriben una sola vez. Al devolverlo escanea el mismo QR, indica en qué estado lo entrega y se guarda la **fecha y hora de devolución**. Los responsables de cada laboratorio ven en un panel qué está prestado, a quién y para qué, y reciben avisos de vencimientos y daños. Un **catálogo** con fotos, descripción y características muestra todos los equipos y si están disponibles.
+Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea con el celular, dice para qué lo va a usar y qué día lo devuelve (hasta 7 días calendario), y el sistema guarda la **fecha y hora de salida**. No hace falta aprobación: el préstamo queda activo al instante y el laboratorio recibe el aviso. Si una actividad necesita **varios equipos**, se escanean uno tras otro en el mismo formulario y los datos de la actividad se escriben una sola vez. Al devolverlo escanea el mismo QR, indica en qué estado lo entrega y se guarda la **fecha y hora de devolución**. Los responsables de cada laboratorio ven en un panel qué está prestado, a quién y para qué, y reciben avisos de vencimientos y daños. Un **catálogo** con fotos, descripción y características muestra todos los equipos y si están disponibles.
 
 <p>
   <img src="docs/img/equipo.png" width="230" alt="Ficha de un equipo al escanear su QR">
@@ -17,7 +17,7 @@ Cada equipo lleva una etiqueta con un **código QR**. Quien lo saca lo escanea c
 ```mermaid
 flowchart LR
     QR[Etiqueta QR<br/>en el equipo] --> Web[Web en GitHub Pages]
-    Web -- préstamo, devolución,<br/>aprobación, daños --> AS[Google Apps Script<br/>oan.unal@gmail.com]
+    Web -- préstamo, devolución,<br/>daños --> AS[Google Apps Script<br/>oan.unal@gmail.com]
     AS --> Hoja[(Hoja de Google en Drive<br/>base de datos)]
     AS --> Correo[Avisos por correo]
 ```
@@ -29,9 +29,9 @@ flowchart LR
 
 | | Documento |
 | --- | --- |
-| 1 | [Visión y alcance](docs/01-vision-y-alcance.md): problema, objetivos, roles y niveles de control |
+| 1 | [Visión y alcance](docs/01-vision-y-alcance.md): problema, objetivos y roles |
 | 2 | [Opciones de implementación](docs/02-opciones-de-implementacion.md): cuatro alternativas comparadas y recomendación |
-| 3 | [Flujos de uso](docs/03-flujos.md): préstamo, devolución, aprobación y estados |
+| 3 | [Flujos de uso](docs/03-flujos.md): préstamo, devolución, plazos y estados |
 | 4 | [Códigos QR y etiquetas](docs/04-codigos-qr-y-etiquetas.md): codificación, material e impresión |
 | 5 | [Modelo de datos](docs/05-modelo-de-datos.md): tablas, columnas y reglas de integridad |
 | 6 | [Pantallas](docs/06-pantallas.md): cada vista de la web |
